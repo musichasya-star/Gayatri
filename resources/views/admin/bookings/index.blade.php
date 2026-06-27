@@ -1,0 +1,12 @@
+@extends('layouts.app')
+
+@section('title', 'Bookings - Gayatri CRM')
+
+@section('content')
+    <x-ui.page-header eyebrow="Booking" title="Booking Treatment" description="Kelola jadwal treatment, status booking, dan assignment terapis.">
+        <x-slot name="actions"><a class="button button-secondary" href="{{ route('admin.bookings.calendar') }}"><i data-lucide="calendar-days"></i> Calendar</a><a class="button button-primary" href="{{ route('admin.bookings.create') }}"><i data-lucide="plus"></i> Tambah Booking</a></x-slot>
+    </x-ui.page-header>
+    @if(session('status'))<div class="card" style="margin-bottom:1rem;border-color:rgba(143,174,139,.55);"><div class="card-body" style="color:#3f6d3d;">{{ session('status') }}</div></div>@endif
+    <div class="card" style="margin-bottom:1rem;"><div class="card-body"><form method="GET" class="grid grid-3"><input class="input" type="date" name="date" value="{{ request('date') }}"><select class="input" name="status"><option value="">Semua status</option>@foreach($statuses as $status)<option value="{{ $status }}" @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select><button class="button button-secondary" type="submit"><i data-lucide="search"></i> Filter</button></form></div></div>
+    <div class="card"><div class="card-body"><table class="table-card"><thead><tr><th>Kode</th><th>Customer</th><th>Layanan</th><th>Terapis</th><th>Tanggal</th><th>Jam</th><th>Status</th><th>Aksi</th></tr></thead><tbody>@forelse($bookings as $booking)<tr><td data-label="Kode">{{ $booking->booking_code }}</td><td data-label="Customer">{{ $booking->customer?->name }}</td><td data-label="Layanan">{{ $booking->service?->name ?: '-' }}</td><td data-label="Terapis">{{ $booking->therapist?->name ?: '-' }}</td><td data-label="Tanggal">{{ $booking->booking_date?->format('d M Y') }}</td><td data-label="Jam">{{ substr($booking->start_time,0,5) }} - {{ substr($booking->end_time,0,5) }}</td><td data-label="Status"><span class="badge badge-gold">{{ $booking->status }}</span></td><td data-label="Aksi"><a class="button button-secondary" href="{{ route('admin.bookings.edit', $booking) }}">Edit</a></td></tr>@empty<tr><td colspan="8" style="text-align:center;padding:2rem;">Belum ada booking.</td></tr>@endforelse</tbody></table><div style="margin-top:1rem;">{{ $bookings->links() }}</div></div></div>
+@endsection

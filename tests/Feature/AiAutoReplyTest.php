@@ -1,0 +1,752 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AiPersona;
+use App\Models\AvailabilitySlot;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\KnowledgeBase;
+use App\Models\Message;
+use App\Models\Service;
+use App\Models\WhatsAppSession;
+use App\Services\AI\AiDataExtractionService;
+use App\Services\AI\AiService;
+use App\Services\AppSettingService;
+use App\Support\AvailabilitySlotStatus;
+use App\Support\ConversationStatus;
+use App\Support\CustomerStatus;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
+class AiAutoReplyTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('waha.base_url', 'http://waha.test');
+        config()->set('waha.default_session', 'default');
+        config()->set('waha.webhook_secret', 'secret-123');
+        config()->set('crm.default_ai_mode', 'auto_reply');
+    }
+
+    public function test_incoming_whatsapp_message_gets_ai_auto_reply_when_safe(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450001@c.us',
+                    'fromMe' => false,
+                    'body' => 'Halo, mau tanya jadwal baby spa',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450001@c.us')->firstOrFail();
+
+        $this->assertSame(ConversationStatus::AI_HANDLED, $conversation->fresh()->status);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'wa_message_id' => 'wamid-ai-out-001',
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+        ]);
+        $this->assertDatabaseHas('ai_logs', [
+            'conversation_id' => $conversation->id,
+            'status' => 'success',
+            'fallback_reason' => null,
+        ]);
+    }
+
+    public function test_medical_question_gets_fallback_and_escalates_to_admin(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-medical-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-medical-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450002@c.us',
+                    'fromMe' => false,
+                    'body' => 'Bayi saya demam, boleh baby spa?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450002@c.us')->firstOrFail();
+
+        $this->assertSame(ConversationStatus::ESCALATED, $conversation->fresh()->status);
+        $this->assertFalse($conversation->fresh()->ai_enabled);
+        $this->assertDatabaseHas('ai_logs', [
+            'conversation_id' => $conversation->id,
+            'status' => 'escalated',
+            'fallback_reason' => 'medical',
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'sender_type' => 'ai',
+            'wa_message_id' => 'wamid-ai-medical-out-001',
+        ]);
+
+        $reply = Message::where('wa_message_id', 'wamid-ai-medical-out-001')->value('content');
+        $this->assertStringContainsString('dokter', $reply);
+        $this->assertStringNotContainsString('admin manusia', $reply);
+        $this->assertStringNotContainsString('forbidden', strtolower($reply));
+        $this->assertStringNotContainsString('guardrail', strtolower($reply));
+    }
+
+    public function test_greeting_gets_conversational_reply_and_keeps_ai_enabled_for_next_message(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::sequence()
+                ->push(['id' => 'wamid-ai-greeting-out-001'], 200)
+                ->push(['id' => 'wamid-ai-greeting-out-002'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-greeting-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450005@c.us',
+                    'fromMe' => false,
+                    'body' => 'Selamat sore',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450005@c.us')->firstOrFail();
+
+        $this->assertTrue((bool) $conversation->fresh()->ai_enabled);
+        $this->assertSame(ConversationStatus::AI_HANDLED, $conversation->fresh()->status);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'wa_message_id' => 'wamid-ai-greeting-out-001',
+        ]);
+        $this->assertStringContainsString('Selamat sore Bunda', Message::where('wa_message_id', 'wamid-ai-greeting-out-001')->value('content'));
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-greeting-in-002',
+                    'timestamp' => 1710000001,
+                    'from' => '628123450005@c.us',
+                    'fromMe' => false,
+                    'body' => 'Mau tanya jadwal baby spa',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertTrue((bool) $conversation->fresh()->ai_enabled);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'wa_message_id' => 'wamid-ai-greeting-out-002',
+        ]);
+    }
+
+    public function test_unknown_question_does_not_disable_ai_for_next_message(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-unknown-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-unknown-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450006@c.us',
+                    'fromMe' => false,
+                    'body' => 'Apakah ada parkir valet?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450006@c.us')->firstOrFail();
+
+        $this->assertSame(ConversationStatus::NEED_FOLLOWUP, $conversation->fresh()->status);
+        $this->assertTrue((bool) $conversation->fresh()->ai_enabled);
+        $this->assertDatabaseHas('ai_logs', [
+            'conversation_id' => $conversation->id,
+            'fallback_reason' => 'no_knowledge',
+        ]);
+    }
+
+    public function test_auto_reply_uses_configured_openrouter_provider(): void
+    {
+        $this->seedAiSetup();
+        app(AppSettingService::class)->setMany([
+            'ai.provider' => 'openrouter',
+            'ai.model' => 'deepseek/deepseek-chat',
+            'ai.temperature' => 0.4,
+            'ai.max_tokens' => 300,
+        ]);
+        app(AppSettingService::class)->set('ai.api_key', 'sk-openrouter-test');
+
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => ['content' => 'Provider AI: Baby spa membantu relaksasi si kecil, Bunda.'],
+                ]],
+            ], 200),
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-provider-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-provider-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450007@c.us',
+                    'fromMe' => false,
+                    'body' => 'Info baby spa untuk bayi?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
+            && $request->hasHeader('Authorization', 'Bearer sk-openrouter-test')
+            && data_get($request->data(), 'model') === 'deepseek/deepseek-chat');
+
+        $this->assertDatabaseHas('messages', [
+            'wa_message_id' => 'wamid-provider-out-001',
+            'sender_type' => 'ai',
+            'content' => 'Provider AI: Baby spa membantu relaksasi si kecil, Bunda.',
+        ]);
+        $this->assertSame('provider', data_get(Conversation::where('wa_chat_id', '628123450007@c.us')->firstOrFail()->aiLogs()->latest('id')->first()->meta, 'reply_source'));
+    }
+
+    public function test_ai_does_not_reply_when_conversation_is_taken_over_by_human(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::response(['id' => 'should-not-send'], 200),
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Bunda Takeover',
+            'whatsapp_number' => '628123450003',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450003@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::HUMAN_HANDLED,
+            'ai_enabled' => false,
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-human-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450003@c.us',
+                    'fromMe' => false,
+                    'body' => 'Masih ada jadwal?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseMissing('messages', [
+            'wa_message_id' => 'should-not-send',
+            'sender_type' => 'ai',
+        ]);
+        $this->assertSame(0, Message::where('sender_type', 'ai')->count());
+    }
+
+    public function test_new_incoming_message_reopens_closed_conversation_but_does_not_reply_if_ai_disabled(): void
+    {
+        $this->seedAiSetup();
+
+        Http::fake([
+            'http://waha.test/api/sendText' => Http::response(['id' => 'should-not-send-closed'], 200),
+        ]);
+
+        $customer = Customer::create([
+            'name' => 'Bunda Closed',
+            'whatsapp_number' => '628123450004',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450004@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::CLOSED,
+            'ai_enabled' => false,
+            'closed_at' => now()->subDay(),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-closed-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450004@c.us',
+                    'fromMe' => false,
+                    'body' => 'Halo admin, mau tanya lagi.',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertSame(ConversationStatus::OPEN, $conversation->fresh()->status);
+        $this->assertFalse($conversation->fresh()->ai_enabled);
+        $this->assertSame(0, Message::where('sender_type', 'ai')->count());
+    }
+
+    public function test_short_booking_confirmation_gets_booking_template_instead_of_no_knowledge_when_data_incomplete(): void
+    {
+        config()->set('ai.provider', 'local');
+        $this->seedAiSetup();
+        $customer = Customer::create([
+            'name' => 'Bunda Konfirmasi',
+            'phone' => '628123450008',
+            'whatsapp_number' => '628123450008',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450008@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '16:00:00',
+            'end_time' => '17:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'Saya ingin booking baby spa besok jam 4 sore',
+            'sent_at' => now(),
+        ]));
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'message_type' => 'text',
+            'content' => 'Kami bisa bantu Baby Spa Premium besok pukul 16:00. Bunda mau pilih slot ini?',
+            'sent_at' => now(),
+        ]);
+        $confirmation = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'Iya saya mau',
+            'sent_at' => now(),
+        ]);
+
+        $result = app(AiService::class)->generateReply($conversation, $confirmation);
+
+        $this->assertSame('success', $result['status']);
+        $this->assertNull($result['fallback_reason']);
+        $this->assertStringContainsString('Nama:', $result['reply']);
+        $this->assertStringContainsString('Alamat:', $result['reply']);
+        $this->assertStringContainsString('Jam reservasi:', $result['reply']);
+        $this->assertStringNotContainsString('belum bisa memastikan', $result['reply']);
+    }
+
+    public function test_booking_rejection_reply_does_not_fall_back_to_no_knowledge(): void
+    {
+        config()->set('ai.provider', 'local');
+        $this->seedAiSetup();
+        $customer = Customer::create([
+            'name' => 'Putri',
+            'phone' => '628123450009',
+            'whatsapp_number' => '628123450009',
+            'address' => 'Kediri',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450009@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => '2026-06-26',
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'nama putri, alamat kediri, tanggal 26, jam 3 sore',
+            'sent_at' => now(),
+        ]));
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'message_type' => 'text',
+            'content' => "Data reservasi sudah lengkap, Bunda. Mohon konfirmasi apakah reservasi ini akan dilanjutkan:\nLayanan: Baby Spa Premium\nTanggal: 2026-06-26\nJam: 15:00\n\nBalas dengan: Iya lanjutkan / Tidak.",
+            'sent_at' => now(),
+        ]);
+        $rejection = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'tidak',
+            'sent_at' => now(),
+        ]);
+
+        $extracted = app(AiDataExtractionService::class)->extractFromMessage($rejection);
+        $result = app(AiService::class)->generateReply($conversation, $rejection);
+
+        $this->assertSame('booking_request', $extracted->intent);
+        $this->assertSame('rejected', data_get($extracted->raw_ai_response, 'booking_confirmation'));
+        $this->assertSame('success', $result['status']);
+        $this->assertStringContainsString('reservasi tidak kami lanjutkan', $result['reply']);
+        $this->assertStringNotContainsString('belum bisa memastikan', $result['reply']);
+    }
+
+    public function test_partial_booking_data_is_merged_with_missing_service_reply_before_provider(): void
+    {
+        config()->set('ai.provider', 'openrouter');
+        config()->set('ai.api_key', 'test-key');
+        config()->set('ai.model', 'test-model');
+        $this->seedAiSetup();
+        $customer = Customer::create([
+            'name' => 'Customer Partial Booking',
+            'phone' => '628123450020',
+            'whatsapp_number' => '628123450020',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450020@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => now()->year.'-06-26',
+            'start_time' => '17:00:00',
+            'end_time' => '18:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'Mohon isi template dari awal.']]],
+            ], 200),
+        ]);
+
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'nama krisna, alamat kweden kediri, tanggal 26 juni, jam 5 sore',
+            'sent_at' => now(),
+        ]));
+        $serviceReply = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'saya ingin baby spa',
+            'sent_at' => now(),
+        ]);
+
+        $extracted = app(AiDataExtractionService::class)->extractFromMessage($serviceReply);
+        $result = app(AiService::class)->generateReply($conversation, $serviceReply);
+
+        $this->assertSame('booking_request', $extracted->intent);
+        $this->assertSame([], $extracted->missing_fields);
+        $this->assertStringContainsString('data reservasinya sudah lengkap', $result['reply']);
+        $this->assertStringContainsString(now()->year.'-06-26', $result['reply']);
+        $this->assertStringContainsString('17:00', $result['reply']);
+        $this->assertStringNotContainsString('template dari awal', $result['reply']);
+    }
+
+    public function test_thanks_after_booking_confirmation_does_not_repeat_booking_details(): void
+    {
+        config()->set('ai.provider', 'local');
+        $this->seedAiSetup();
+        $customer = Customer::create([
+            'name' => 'Bunda Thanks Booking',
+            'phone' => '628123450021',
+            'whatsapp_number' => '628123450021',
+            'address' => 'Kediri',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450021@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => '2026-06-26',
+            'start_time' => '16:00:00',
+            'end_time' => '17:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'booking nama putri, alamat kediri, tanggal 26 juni, jam 4 sore layanan baby spa',
+            'sent_at' => now(),
+        ]));
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'message_type' => 'text',
+            'content' => "Siap Bunda, data reservasinya sudah lengkap. Mohon cek kembali detail berikut:\nLayanan: Baby Spa Premium\nTanggal: 2026-06-26\nJam: 16:00",
+            'sent_at' => now(),
+        ]);
+        $thanks = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'baik terima kasih',
+            'sent_at' => now(),
+        ]);
+
+        $extracted = app(AiDataExtractionService::class)->extractFromMessage($thanks);
+        $result = app(AiService::class)->generateReply($conversation, $thanks);
+
+        $this->assertSame('general_inquiry', $extracted->intent);
+        $this->assertSame([], $extracted->extracted_booking_data);
+        $this->assertStringContainsString('Sama-sama Bunda', $result['reply']);
+        $this->assertStringNotContainsString('data reservasinya sudah lengkap', $result['reply']);
+        $this->assertStringNotContainsString('Baby Spa Premium', $result['reply']);
+        $this->assertStringNotContainsString('2026-06-26', $result['reply']);
+    }
+
+    public function test_general_question_after_booking_confirmation_does_not_repeat_booking_details(): void
+    {
+        config()->set('ai.provider', 'openrouter');
+        config()->set('ai.api_key', 'test-key');
+        config()->set('ai.model', 'test-model');
+        $this->seedAiSetup();
+        $customer = Customer::create([
+            'name' => 'Bunda General After Booking',
+            'phone' => '628123450022',
+            'whatsapp_number' => '628123450022',
+            'address' => 'Kediri',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450022@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => '2026-06-26',
+            'start_time' => '16:00:00',
+            'end_time' => '17:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'booking nama putri, alamat kediri, tanggal 26 juni, jam 4 sore layanan baby spa',
+            'sent_at' => now(),
+        ]));
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'message_type' => 'text',
+            'content' => "Siap Bunda, data reservasinya sudah lengkap. Mohon cek kembali detail berikut:\nLayanan: Baby Spa Premium\nTanggal: 2026-06-26\nJam: 16:00",
+            'sent_at' => now(),
+        ]);
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'Saya Gayatri Assistant, siap membantu Bunda.']]],
+            ], 200),
+        ]);
+        $question = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'kamu namanya siapa?',
+            'sent_at' => now(),
+        ]);
+
+        $extracted = app(AiDataExtractionService::class)->extractFromMessage($question);
+        $result = app(AiService::class)->generateReply($conversation, $question);
+
+        $this->assertSame('general_inquiry', $extracted->intent);
+        $this->assertSame([], $extracted->extracted_booking_data);
+        $this->assertStringContainsString('Gayatri Assistant', $result['reply']);
+        $this->assertStringNotContainsString('data reservasinya sudah lengkap', $result['reply']);
+        $this->assertStringNotContainsString('Baby Spa Premium', $result['reply']);
+        $this->assertStringNotContainsString('2026-06-26', $result['reply']);
+    }
+
+    private function seedAiSetup(): void
+    {
+        AiPersona::create([
+            'name' => 'Gayatri Assistant',
+            'slug' => 'gayatri-assistant',
+            'prompt' => 'Jawab hanya berdasarkan knowledge base Gayatri dan eskalasi pertanyaan medis.',
+            'tone' => 'warm-professional',
+            'is_active' => true,
+        ]);
+
+        $knowledge = KnowledgeBase::create([
+            'title' => 'FAQ Baby Spa',
+            'slug' => 'faq-baby-spa',
+            'type' => 'faq',
+            'content' => 'Baby spa tersedia pukul 09.00 sampai 18.00. Booking bisa dibantu admin Gayatri.',
+            'status' => 'active',
+        ]);
+
+        $knowledge->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'Baby spa tersedia pukul 09.00 sampai 18.00.',
+            'token_count' => 8,
+        ]);
+    }
+}

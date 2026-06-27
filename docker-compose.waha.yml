@@ -1,0 +1,19 @@
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: gayatri-waha
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      WAHA_API_KEY: "gayatri-waha-local-key"
+      WAHA_DASHBOARD_USERNAME: "admin"
+      WAHA_DASHBOARD_PASSWORD: "gayatri-waha-admin"
+      WHATSAPP_SWAGGER_USERNAME: "admin"
+      WHATSAPP_SWAGGER_PASSWORD: "gayatri-waha-admin"
+      WHATSAPP_DEFAULT_ENGINE: "WEBJS"
+    volumes:
+      - gayatri_waha_sessions:/app/.sessions
+
+volumes:
+  gayatri_waha_sessions:
