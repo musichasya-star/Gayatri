@@ -83,6 +83,7 @@ class SettingController extends Controller
             'base_url' => ['required', 'url', 'max:255'],
             'api_key' => ['nullable', 'string', 'max:500'],
             'default_session' => ['required', 'string', 'max:100'],
+            'webhook_base_url' => ['nullable', 'url', 'max:255'],
             'webhook_secret' => ['nullable', 'string', 'max:255'],
             'timeout' => ['required', 'integer', 'min:3', 'max:120'],
         ]);
@@ -92,6 +93,9 @@ class SettingController extends Controller
             'waha.default_session' => $data['default_session'],
             'waha.timeout' => $data['timeout'],
         ]);
+
+        $webhookBaseUrl = trim((string) $data['webhook_base_url']);
+        $this->settings->set('waha.webhook_base_url', $webhookBaseUrl === '' ? null : rtrim($webhookBaseUrl, '/'));
 
         if (filled($data['api_key'] ?? null)) {
             $this->settings->set('waha.api_key', $data['api_key']);
@@ -106,6 +110,7 @@ class SettingController extends Controller
             'base_url' => rtrim($data['base_url'], '/'),
             'default_session' => $data['default_session'],
             'timeout' => $data['timeout'],
+            'webhook_base_url_set' => $webhookBaseUrl !== '',
             'api_key_changed' => filled($data['api_key'] ?? null),
             'webhook_secret_changed' => filled($data['webhook_secret'] ?? null),
         ], 'WAHA settings updated');
@@ -214,6 +219,7 @@ class SettingController extends Controller
             'waha.base_url' => $this->settings->get('waha.base_url', config('waha.base_url', 'http://localhost:3000')),
             'waha.api_key_set' => filled($this->settings->get('waha.api_key', config('waha.api_key'))),
             'waha.default_session' => $this->settings->get('waha.default_session', config('waha.default_session', 'default')),
+            'waha.webhook_base_url' => $this->settings->get('waha.webhook_base_url', config('waha.webhook_base_url')),
             'waha.webhook_secret_set' => filled($this->settings->get('waha.webhook_secret', config('waha.webhook_secret'))),
             'waha.timeout' => $this->settings->get('waha.timeout', config('waha.timeout', 30)),
         ];

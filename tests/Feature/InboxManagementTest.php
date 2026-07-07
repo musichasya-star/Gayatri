@@ -169,6 +169,45 @@ class InboxManagementTest extends TestCase
         ]);
     }
 
+    public function test_inbox_pagination_uses_dashboard_labels(): void
+    {
+        $admin = User::factory()->create([
+            'role' => UserRole::ADMIN,
+            'status' => UserStatus::ACTIVE,
+        ]);
+        $session = WhatsAppSession::create([
+            'session_name' => 'default',
+            'status' => 'working',
+        ]);
+
+        foreach (range(1, 16) as $index) {
+            $customer = Customer::create([
+                'name' => 'Customer Page '.$index,
+                'whatsapp_number' => '628123450'.str_pad((string) $index, 4, '0', STR_PAD_LEFT),
+                'status' => CustomerStatus::ACTIVE,
+            ]);
+
+            Conversation::create([
+                'customer_id' => $customer->id,
+                'whatsapp_session_id' => $session->id,
+                'wa_chat_id' => $customer->whatsapp_number.'@c.us',
+                'status' => ConversationStatus::OPEN,
+                'channel' => 'whatsapp',
+                'ai_enabled' => true,
+                'last_message_at' => now()->subMinutes($index),
+            ]);
+        }
+
+        $this->actingAs($admin)
+            ->get(route('admin.inbox'))
+            ->assertOk()
+            ->assertSee('Berikutnya')
+            ->assertSee('Menampilkan 1 sampai 15 dari 16 data')
+            ->assertDontSee('pagination.previous')
+            ->assertDontSee('pagination.next')
+            ->assertDontSee('Showing 1 to 15 of 16 results');
+    }
+
     private function seedConversationThread(): array
     {
         $customer = Customer::create([

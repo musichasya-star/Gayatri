@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Services\CRM\RetentionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,9 +18,40 @@ class RetentionController extends Controller
             $days = 30;
         }
 
+        $search = trim((string) $request->string('q'));
+        $followupStatus = trim((string) $request->string('followup_status', 'all'));
+        $tag = trim((string) $request->string('tag'));
+
+        $allowedStatuses = ['all', 'active', 'open', 'sent', 'completed', 'none'];
+        if (! in_array($followupStatus, $allowedStatuses, true)) {
+            $followupStatus = 'all';
+        }
+
+        $customers = $retentionService->inactiveCustomersQuery($days, $search, $followupStatus, $tag, true)
+            ->paginate(15)
+            ->withQueryString();
+
+        $tagOptions = $retentionService->retentionTagOptions($days, $search, $followupStatus);
+
+        $quickFollowups = [];
+        foreach ($customers->getCollection() as $customer) {
+            if ($customer instanceof Customer) {
+                $quickFollowups[$customer->id] = $retentionService->generateQuickFollowupPayload(
+                    $customer,
+                    $days,
+                    $request->user()->id,
+                );
+            }
+        }
+
         return view('admin.retention.index', [
             'days' => $days,
-            'customers' => $retentionService->inactiveCustomers($days),
+            'search' => $search,
+            'followupStatus' => $followupStatus,
+            'tag' => $tag,
+            'tagOptions' => $tagOptions,
+            'quickFollowups' => $quickFollowups,
+            'customers' => $customers,
         ]);
     }
 

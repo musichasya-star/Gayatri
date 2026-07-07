@@ -69,6 +69,11 @@
                         <input class="input" type="url" name="base_url" value="{{ old('base_url', $settings['waha.base_url']) }}" placeholder="http://localhost:3000" required>
                     </label>
                     <label style="grid-column:1/-1;">
+                        <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Webhook Base URL (Opsional)</span>
+                        <input class="input" type="url" name="webhook_base_url" value="{{ old('webhook_base_url', $settings['waha.webhook_base_url']) }}" placeholder="https://7digital-solution.web.id">
+                        <small class="muted">Kosongkan jika WAHA berjalan di lokal. Isi URL publik agar WAHA eksternal bisa memanggil webhook.</small>
+                    </label>
+                    <label style="grid-column:1/-1;">
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">API Key</span>
                         <input class="input" type="password" name="api_key" placeholder="{{ $settings['waha.api_key_set'] ? 'API key sudah tersimpan. Isi untuk mengganti.' : 'Masukkan X-Api-Key WAHA jika dipakai' }}">
                     </label>

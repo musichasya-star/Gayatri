@@ -117,8 +117,11 @@ class BookingService
         $promo = $this->validPromo($data['promo_id'] ?? null, $oldPromoId);
         $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $endTime->format('H:i:s'), $booking);
 
-        $wasConfirmed = $booking->status === BookingStatus::CONFIRMED;
-        $wasCompleted = $booking->status === BookingStatus::COMPLETED;
+        $oldStatus = $booking->status;
+        $oldBookingDate = $booking->booking_date?->toDateString();
+        $oldStartTime = substr((string) $booking->start_time, 0, 5);
+        $wasConfirmed = $oldStatus === BookingStatus::CONFIRMED;
+        $wasCompleted = $oldStatus === BookingStatus::COMPLETED;
 
         $booking->update([
             'customer_id' => $data['customer_id'],
@@ -144,8 +147,22 @@ class BookingService
             $this->sendConfirmation($booking);
         }
 
+        $scheduleChanged = $oldBookingDate !== $booking->booking_date?->toDateString() || $oldStartTime !== substr((string) $booking->start_time, 0, 5);
+        $sentConfirmationForStatusChange = ! $wasConfirmed && $booking->status === BookingStatus::CONFIRMED;
+        if ($scheduleChanged && ! $sentConfirmationForStatusChange && ! in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW], true)) {
+            if ($booking->status === BookingStatus::CONFIRMED) {
+                $this->reminderService->syncForConfirmedBooking($booking);
+            }
+
+            $this->sendRescheduleNotice($booking, $oldBookingDate, $oldStartTime);
+        }
+
         if (! $wasCompleted && $booking->status === BookingStatus::COMPLETED) {
             $this->feedbackService->requestForBooking($booking);
+        }
+
+        if ($oldStatus !== $booking->status && in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER], true)) {
+            $this->sendCancellationNotice($booking);
         }
 
         if (in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::RESCHEDULED], true)) {
@@ -169,6 +186,7 @@ class BookingService
 
         $this->releaseSlot($oldSlot);
         $this->reminderService->cancelForBooking($booking);
+        $this->sendCancellationNotice($booking->refresh());
 
         return $booking->refresh();
     }
@@ -371,16 +389,12 @@ class BookingService
 
     private function sendConfirmation(Booking $booking): void
     {
-        $booking->loadMissing(['customer', 'service', 'therapist', 'conversation.whatsappSession']);
-        $conversation = $booking->conversation ?: Conversation::query()
-            ->where('customer_id', $booking->customer_id)
-            ->latest('last_message_at')
-            ->first();
-
-        if (! $conversation || ! $booking->customer?->whatsapp_number) {
+        $target = $this->whatsAppTarget($booking);
+        if (! $target) {
             return;
         }
 
+        [$conversation] = $target;
         $message = sprintf(
             'Baik Bunda, booking %s sudah dikonfirmasi untuk %s pukul %s. Mohon hadir 10 menit sebelum jadwal ya Bunda.',
             $booking->service?->name ?: 'treatment Gayatri',
@@ -389,5 +403,59 @@ class BookingService
         );
 
         SendWhatsAppMessageJob::dispatch($conversation->id, null, 'system', $message, $conversation->whatsappSession?->session_name);
+    }
+
+    private function sendRescheduleNotice(Booking $booking, ?string $oldDate, ?string $oldTime): void
+    {
+        $target = $this->whatsAppTarget($booking);
+        if (! $target) {
+            return;
+        }
+
+        [$conversation] = $target;
+        $message = sprintf(
+            'Baik Bunda, jadwal booking %s sudah kami ubah dari %s pukul %s menjadi %s pukul %s. Mohon hadir 10 menit sebelum jadwal baru ya Bunda.',
+            $booking->service?->name ?: 'treatment Gayatri',
+            $oldDate ? Carbon::parse($oldDate)->format('d M Y') : '-',
+            $oldTime ?: '-',
+            $booking->booking_date?->format('d M Y'),
+            substr((string) $booking->start_time, 0, 5),
+        );
+
+        SendWhatsAppMessageJob::dispatch($conversation->id, null, 'system', $message, $conversation->whatsappSession?->session_name);
+    }
+
+    private function sendCancellationNotice(Booking $booking): void
+    {
+        $target = $this->whatsAppTarget($booking);
+        if (! $target) {
+            return;
+        }
+
+        [$conversation] = $target;
+        $message = sprintf(
+            'Baik Bunda, booking %s untuk %s pukul %s sudah dibatalkan. Jika Bunda ingin membuat jadwal baru, silakan chat kami kembali kapan saja ya.',
+            $booking->service?->name ?: 'treatment Gayatri',
+            $booking->booking_date?->format('d M Y'),
+            substr((string) $booking->start_time, 0, 5),
+        );
+
+        SendWhatsAppMessageJob::dispatch($conversation->id, null, 'system', $message, $conversation->whatsappSession?->session_name);
+    }
+
+    private function whatsAppTarget(Booking $booking): ?array
+    {
+        $booking->loadMissing(['customer', 'service', 'therapist', 'conversation.whatsappSession']);
+        $conversation = $booking->conversation ?: Conversation::query()
+            ->with('whatsappSession')
+            ->where('customer_id', $booking->customer_id)
+            ->latest('last_message_at')
+            ->first();
+
+        if (! $conversation || ! $booking->customer?->whatsapp_number) {
+            return null;
+        }
+
+        return [$conversation];
     }
 }

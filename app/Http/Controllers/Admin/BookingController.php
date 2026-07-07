@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiAutomationApproval;
 use App\Models\AvailabilitySlot;
 use App\Models\Booking;
 use App\Models\Branch;
@@ -37,7 +38,22 @@ class BookingController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.bookings.index', ['bookings' => $bookings, 'statuses' => BookingStatus::all()]);
+        $bookingApprovalMap = AiAutomationApproval::query()
+            ->where('status', 'pending')
+            ->where('target_entity', 'booking')
+            ->whereIn('action', ['create_booking_draft', 'create_booking_confirmed', 'reschedule_booking', 'cancel_booking'])
+            ->latest()
+            ->get()
+            ->flatMap(function (AiAutomationApproval $approval) {
+                $booking = $approval->proposed_data['booking'] ?? [];
+
+                return collect([
+                    $booking['booking_id'] ?? null,
+                    $booking['booking_code'] ?? null,
+                ])->filter()->mapWithKeys(fn ($key) => [(string) $key => $approval]);
+            });
+
+        return view('admin.bookings.index', ['bookings' => $bookings, 'statuses' => BookingStatus::all(), 'bookingApprovalMap' => $bookingApprovalMap]);
     }
 
     public function create(Request $request): View

@@ -39,32 +39,42 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
             ['status' => 'unknown']
         );
 
-        $customer = Customer::firstOrCreate(
-            ['whatsapp_number' => $whatsappNumber],
-            [
-                'name' => 'Customer '.$whatsappNumber,
-                'phone' => $whatsappNumber,
-                'status' => CustomerStatus::LEAD,
-                'last_interaction_at' => now(),
-            ]
-        );
+        $conversation = Conversation::with('customer')->where('wa_chat_id', $chatId)->first();
 
-        $conversation = Conversation::firstOrCreate(
-            ['wa_chat_id' => $chatId],
-            [
-                'customer_id' => $customer->id,
-                'whatsapp_session_id' => $session->id,
-                'status' => ConversationStatus::OPEN,
-                'channel' => 'whatsapp',
-                'ai_enabled' => true,
-            ]
-        );
+        if ($conversation && $conversation->customer) {
+            $customer = $conversation->customer;
 
-        if ($conversation->customer_id !== $customer->id || $conversation->whatsapp_session_id !== $session->id) {
-            $conversation->update([
-                'customer_id' => $customer->id,
-                'whatsapp_session_id' => $session->id,
-            ]);
+            if ($conversation->whatsapp_session_id !== $session->id) {
+                $conversation->update(['whatsapp_session_id' => $session->id]);
+            }
+        } else {
+            $customer = Customer::firstOrCreate(
+                ['whatsapp_number' => $whatsappNumber],
+                [
+                    'name' => 'Customer '.$whatsappNumber,
+                    'phone' => $whatsappNumber,
+                    'status' => CustomerStatus::LEAD,
+                    'last_interaction_at' => now(),
+                ]
+            );
+
+            $conversation = Conversation::firstOrCreate(
+                ['wa_chat_id' => $chatId],
+                [
+                    'customer_id' => $customer->id,
+                    'whatsapp_session_id' => $session->id,
+                    'status' => ConversationStatus::OPEN,
+                    'channel' => 'whatsapp',
+                    'ai_enabled' => true,
+                ]
+            );
+
+            if ($conversation->customer_id !== $customer->id || $conversation->whatsapp_session_id !== $session->id) {
+                $conversation->update([
+                    'customer_id' => $customer->id,
+                    'whatsapp_session_id' => $session->id,
+                ]);
+            }
         }
 
         if ($messageId !== '' && Message::where('wa_message_id', $messageId)->exists()) {

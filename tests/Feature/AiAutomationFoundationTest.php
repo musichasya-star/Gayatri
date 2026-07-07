@@ -469,16 +469,17 @@ class AiAutomationFoundationTest extends TestCase
             'price' => 250000,
             'is_active' => true,
         ]);
+        $targetDate = now()->addDay()->toDateString();
         $slot = AvailabilitySlot::create([
             'service_id' => $service->id,
-            'slot_date' => now()->year.'-06-26',
+            'slot_date' => $targetDate,
             'start_time' => '15:00:00',
             'end_time' => '16:00:00',
             'capacity' => 1,
             'booked_count' => 0,
             'status' => AvailabilitySlotStatus::AVAILABLE,
         ]);
-        $dataMessage = $this->incomingMessage($conversation, $customer, 'Nama rizal, alamat kediri, layanan baby spa, tanggal 26 Juni, jam 3 sore');
+        $dataMessage = $this->incomingMessage($conversation, $customer, 'Nama rizal, alamat kediri, layanan baby spa, tanggal '.$targetDate.', jam 3 sore');
 
         $extracted = app(AiDataExtractionService::class)->extractFromMessage($dataMessage);
 
@@ -490,7 +491,7 @@ class AiAutomationFoundationTest extends TestCase
         $this->assertSame('awaiting_confirmation', $extracted->fresh()->status);
         $this->assertDatabaseMissing('bookings', ['conversation_id' => $conversation->id]);
 
-        $this->outgoingAiMessage($conversation, $customer, "Data reservasi sudah lengkap.\nLayanan: Baby Spa Premium\nTanggal: 2026-06-26\nJam: 15:00");
+        $this->outgoingAiMessage($conversation, $customer, "Data reservasi sudah lengkap.\nLayanan: Baby Spa Premium\nTanggal: {$targetDate}\nJam: 15:00");
         $confirmed = app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'Iya lanjutkan'));
         app(AiAutomationExecutorService::class)->process($confirmed);
         $this->assertDatabaseHas('bookings', [
@@ -518,7 +519,7 @@ class AiAutomationFoundationTest extends TestCase
             'direction' => 'outgoing',
             'sender_type' => 'ai',
             'message_type' => 'text',
-            'content' => "Terima kasih, Bunda Rizal! Berikut detail booking:\n- Nama: Rizal\n- Alamat: Kediri\n- Layanan: Baby Spa Premium\n- Tanggal: 26 Juni 2026\n- Jam: 15:00 WIB\nSilakan konfirmasi jika semua sudah benar.",
+            'content' => "Terima kasih, Bunda Rizal! Berikut detail booking:\n- Nama: Rizal\n- Alamat: Kediri\n- Layanan: Baby Spa Premium\n- Tanggal: {$targetDate}\n- Jam: 15:00 WIB\nSilakan konfirmasi jika semua sudah benar.",
             'sent_at' => now(),
         ]);
         $baikProses = app(AiDataExtractionService::class)->extractFromMessage(
@@ -557,16 +558,17 @@ class AiAutomationFoundationTest extends TestCase
             'price' => 250000,
             'is_active' => true,
         ]);
+        $targetDate = now()->addDay()->toDateString();
         AvailabilitySlot::create([
             'service_id' => $service->id,
-            'slot_date' => now()->year.'-06-26',
+            'slot_date' => $targetDate,
             'start_time' => '15:00:00',
             'end_time' => '16:00:00',
             'capacity' => 1,
             'booked_count' => 0,
             'status' => AvailabilitySlotStatus::AVAILABLE,
         ]);
-        $message = $this->incomingMessage($conversation, $customer, 'nama krisna, alamat tulungagung, layanan baby spa, tanggal reservasi 26 juni, jam 3 sore');
+        $message = $this->incomingMessage($conversation, $customer, 'nama krisna, alamat tulungagung, layanan baby spa, tanggal reservasi '.$targetDate.', jam 3 sore');
 
         $extracted = app(AiDataExtractionService::class)->extractFromMessage($message);
         app(AiAutomationExecutorService::class)->process($extracted);
@@ -575,7 +577,7 @@ class AiAutomationFoundationTest extends TestCase
         $this->assertSame('krisna', $customer->fresh()->name);
         $this->assertSame('awaiting_confirmation', $extracted->fresh()->status);
 
-        $this->outgoingAiMessage($conversation, $customer, "Data reservasi sudah lengkap.\nLayanan: Baby Spa Premium\nTanggal: ".now()->year."-06-26\nJam: 15:00");
+        $this->outgoingAiMessage($conversation, $customer, "Data reservasi sudah lengkap.\nLayanan: Baby Spa Premium\nTanggal: {$targetDate}\nJam: 15:00");
         $confirmed = app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'Iya lanjutkan'));
         app(AiAutomationExecutorService::class)->process($confirmed);
 
@@ -966,16 +968,17 @@ class AiAutomationFoundationTest extends TestCase
             'conversation_id' => $conversation->id,
             'service_id' => $service->id,
             'booking_code' => 'BK-GAY-TEST-ACTIVE2',
-            'booking_date' => '2026-06-26',
+            'booking_date' => now()->addDay()->toDateString(),
             'start_time' => '16:00:00',
             'end_time' => '17:00:00',
             'status' => BookingStatus::CONFIRMED,
             'payment_status' => 'unpaid',
             'source' => 'ai_approval',
         ]);
+        $targetDate = now()->addDays(2)->toDateString();
         $slot = AvailabilitySlot::create([
             'service_id' => $service->id,
-            'slot_date' => now()->year.'-06-28',
+            'slot_date' => $targetDate,
             'start_time' => '16:00:00',
             'end_time' => '17:00:00',
             'capacity' => 1,
@@ -983,12 +986,12 @@ class AiAutomationFoundationTest extends TestCase
             'status' => AvailabilitySlotStatus::AVAILABLE,
         ]);
 
-        app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'Saya mau reservasi baby spa tanggal 28 juni jam 4 sore'));
+        app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'Saya mau reservasi baby spa tanggal '.$targetDate.' jam 4 sore'));
         $this->outgoingAiMessage($conversation, $customer, 'Bunda ingin membuat reservasi baru atau mengubah jadwal reservasi yang sudah ada? Balas: Booking baru / Ubah jadwal.');
         $choice = app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'booking baru'));
         app(AiAutomationExecutorService::class)->process($choice);
 
-        $dataMessage = $this->incomingMessage($conversation, $customer, 'nama tya, alamat kediri, tanggal 28 juni, jam 4 sore');
+        $dataMessage = $this->incomingMessage($conversation, $customer, 'nama tya, alamat kediri, tanggal '.$targetDate.', jam 4 sore');
         $extracted = app(AiDataExtractionService::class)->extractFromMessage($dataMessage);
         $reply = app(AiService::class)->generateReply($conversation, $dataMessage);
 
@@ -997,7 +1000,7 @@ class AiAutomationFoundationTest extends TestCase
         $this->assertSame($slot->id, data_get($extracted->extracted_booking_data, 'availability_slot_id'));
         $this->assertStringNotContainsString('reservasi baru atau mengubah jadwal', $reply['reply']);
         $this->assertStringContainsString('data reservasinya sudah lengkap', $reply['reply']);
-        $this->assertStringContainsString(now()->year.'-06-28', $reply['reply']);
+        $this->assertStringContainsString($targetDate, $reply['reply']);
     }
 
     public function test_explicit_booking_baru_does_not_reuse_previous_cancel_context(): void

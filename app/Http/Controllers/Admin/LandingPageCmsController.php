@@ -29,7 +29,13 @@ class LandingPageCmsController extends Controller
             'theme_settings' => ['nullable', 'array'],
         ]);
 
-        $this->page()->update($data);
+        $page = $this->page();
+        $page->update([
+            'site_name' => $data['site_name'],
+            'page_settings' => array_replace_recursive($page->page_settings ?? [], $data['page_settings'] ?? []),
+            'seo_settings' => array_replace_recursive($page->seo_settings ?? [], $data['seo_settings'] ?? []),
+            'theme_settings' => array_replace_recursive($page->theme_settings ?? [], $data['theme_settings'] ?? []),
+        ]);
 
         return back()->with('status', 'Page, SEO, dan theme settings berhasil disimpan.');
     }

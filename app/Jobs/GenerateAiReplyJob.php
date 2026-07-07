@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\AI\AiService;
+use App\Services\AI\ConversationFlowService;
 use App\Services\AppSettingService;
 use App\Support\ConversationStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -16,7 +17,7 @@ class GenerateAiReplyJob implements ShouldQueue
 
     public function __construct(private readonly int $conversationId, private readonly int $messageId) {}
 
-    public function handle(AiService $aiService, AppSettingService $settings): void
+    public function handle(AiService $aiService, AppSettingService $settings, ConversationFlowService $flowService): void
     {
         $settings->applyToConfig();
 
@@ -35,7 +36,7 @@ class GenerateAiReplyJob implements ShouldQueue
             return;
         }
 
-        $result = $aiService->generateReply($conversation, $message);
+        $result = $flowService->handle($conversation, $message) ?: $aiService->generateReply($conversation, $message);
 
         if (($result['fallback_reason'] ?? null) === 'missing_persona') {
             $conversation->update([

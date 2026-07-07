@@ -84,7 +84,10 @@ Route::prefix('admin')
             Route::put('/availability/{slot}', [AvailabilitySlotController::class, 'update'])->name('availability.update');
             Route::post('/availability/{slot}/block', [AvailabilitySlotController::class, 'block'])->name('availability.block');
             Route::get('/reminders', [ReminderController::class, 'index'])->name('reminders.index');
+            Route::post('/reminders', [ReminderController::class, 'store'])->name('reminders.store');
             Route::post('/reminders/{reminder}/retry', [ReminderController::class, 'retry'])->name('reminders.retry');
+            Route::post('/reminders/{reminder}/send-now', [ReminderController::class, 'sendNow'])->name('reminders.send-now');
+            Route::post('/reminders/{reminder}/cancel', [ReminderController::class, 'cancel'])->name('reminders.cancel');
         });
         Route::middleware('role:owner,manager,admin,sales')->group(function () {
             Route::get('/followups', [FollowupController::class, 'index'])->name('followups.index');

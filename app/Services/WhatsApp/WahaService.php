@@ -10,12 +10,12 @@ class WahaService
 {
     public function listSessions(): array
     {
-        return $this->request()->get('/api/sessions/')->throw()->json() ?? [];
+        return $this->request()->get('/api/sessions')->throw()->json() ?? [];
     }
 
     public function createSession(string $name, array $config = []): array
     {
-        return $this->request()->post('/api/sessions/', [
+        return $this->request()->post('/api/sessions', [
             'name' => $name,
             'config' => $config,
         ])->throw()->json();

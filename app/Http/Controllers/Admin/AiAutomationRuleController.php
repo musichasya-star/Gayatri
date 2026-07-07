@@ -72,7 +72,7 @@ class AiAutomationRuleController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'trigger_event' => ['required', 'string', 'max:100'],
-            'target_entity' => ['required', Rule::in(['customer', 'booking', 'followup'])],
+            'target_entity' => ['required', Rule::in(['customer', 'booking', 'followup', 'reminder'])],
             'action' => ['required', 'string', 'max:100'],
             'mode' => ['required', Rule::in(['auto_create', 'need_confirmation', 'human_only'])],
             'confidence_threshold' => ['required', 'numeric', 'min:0', 'max:1'],

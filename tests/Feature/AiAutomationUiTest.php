@@ -12,8 +12,10 @@ use App\Models\Message;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AiAutomationUiTest extends TestCase
@@ -77,7 +79,7 @@ class AiAutomationUiTest extends TestCase
             ->assertSee('Rina');
     }
 
-    public function test_admin_can_approve_booking_approval_into_booking_draft(): void
+    public function test_admin_can_approve_booking_approval_into_confirmed_booking(): void
     {
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         [$customer, $conversation, $message] = $this->seedMessage();
@@ -124,12 +126,60 @@ class AiAutomationUiTest extends TestCase
         $this->assertDatabaseHas('bookings', [
             'customer_id' => $customer->id,
             'service_id' => $service->id,
-            'status' => 'draft',
+            'status' => BookingStatus::CONFIRMED,
             'source' => 'ai_approval',
         ]);
         $this->assertDatabaseHas('ai_automation_logs', [
             'ai_automation_approval_id' => $approval->id,
             'status' => 'approved',
+        ]);
+    }
+
+    public function test_admin_can_approve_confirmed_booking_approval_and_send_whatsapp(): void
+    {
+        config()->set('waha.base_url', 'http://waha.test');
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-approval-confirmed'], 200)]);
+
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        [$customer, $conversation, $message] = $this->seedMessage('628123450095');
+        $service = Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+        $extracted = AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_request',
+            'confidence_score' => 0.95,
+            'status' => 'pending_approval',
+        ]);
+        $approval = AiAutomationApproval::create([
+            'ai_extracted_data_id' => $extracted->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'target_entity' => 'booking',
+            'action' => 'create_booking_confirmed',
+            'mode' => 'need_confirmation',
+            'proposed_data' => ['booking' => ['service_id' => $service->id, 'booking_date' => now()->addDay()->toDateString(), 'start_time' => '10:00:00']],
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.ai.data-automation.approvals.approve', $approval))
+            ->assertRedirect(route('admin.ai.data-automation.approvals.index'));
+
+        $this->assertDatabaseHas('bookings', [
+            'customer_id' => $customer->id,
+            'service_id' => $service->id,
+            'status' => BookingStatus::CONFIRMED,
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'content' => 'Baik Bunda, booking Baby Spa Premium sudah dikonfirmasi untuk '.now()->addDay()->format('d M Y').' pukul 10:00. Mohon hadir 10 menit sebelum jadwal ya Bunda.',
         ]);
     }
 
@@ -174,6 +224,57 @@ class AiAutomationUiTest extends TestCase
             'status' => 'rejected',
             'error_message' => 'Data booking belum lengkap.',
         ]);
+    }
+
+    public function test_approval_detail_shows_human_readable_proposed_data(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        [$customer, $conversation, $message] = $this->seedMessage('628123450096');
+        $extracted = AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_reschedule_request',
+            'confidence_score' => 0.95,
+            'raw_ai_response' => ['intent' => 'booking_reschedule_request'],
+            'status' => 'pending_approval',
+        ]);
+        $approval = AiAutomationApproval::create([
+            'ai_extracted_data_id' => $extracted->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'target_entity' => 'booking',
+            'action' => 'reschedule_booking',
+            'mode' => 'need_confirmation',
+            'proposed_data' => [
+                'booking' => [
+                    'booking_code' => 'BK-GAY-TEST',
+                    'current_booking_date' => now()->addDay()->toDateString(),
+                    'current_start_time' => '14:00:00',
+                    'service_name' => 'Baby Spa Premium',
+                    'booking_date' => now()->addDays(2)->toDateString(),
+                    'start_time' => '15:00:00',
+                    'availability_slot_id' => 7,
+                    'source' => 'ai_flow',
+                ],
+                'intent' => 'booking_reschedule_request',
+                'confidence_score' => 0.95,
+                'rule' => ['name' => 'Default AI Booking Reschedule Automation'],
+            ],
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.ai.data-automation.approvals.show', $approval))
+            ->assertOk()
+            ->assertSee('Detail Request')
+            ->assertSee('Perubahan Jadwal')
+            ->assertSee('Jadwal Saat Ini')
+            ->assertSee('Jadwal Baru Diminta')
+            ->assertSee('BK-GAY-TEST')
+            ->assertSee('15:00')
+            ->assertDontSee('"booking"', false)
+            ->assertDontSee('"current_booking_date"', false);
     }
 
     public function test_admin_can_view_automation_log_detail(): void

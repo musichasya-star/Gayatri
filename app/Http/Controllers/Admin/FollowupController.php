@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -11,6 +12,7 @@ use App\Services\CRM\RetentionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class FollowupController extends Controller
@@ -37,13 +39,17 @@ class FollowupController extends Controller
         return view('admin.followups.index', compact('followups'));
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('admin.followups.form', $this->formData(new Followup([
+        $followup = new Followup([
             'status' => 'open',
             'priority' => 'normal',
             'due_at' => now()->addDay(),
-        ])));
+        ]);
+
+        $followup->fill($this->defaultsFromQuery($request));
+
+        return view('admin.followups.form', $this->formData($followup));
     }
 
     public function store(Request $request): RedirectResponse
@@ -126,5 +132,61 @@ class FollowupController extends Controller
             'priority' => ['required', 'in:normal,high'],
             'due_at' => ['nullable', 'date'],
         ]);
+    }
+
+    private function defaultsFromQuery(Request $request): array
+    {
+        $defaults = [];
+
+        if ($request->filled('customer_id')) {
+            $customerId = (int) $request->integer('customer_id');
+            if ($customerId > 0) {
+                $defaults['customer_id'] = $customerId;
+            }
+        }
+
+        if ($request->filled('conversation_id')) {
+            $conversationId = (int) $request->integer('conversation_id');
+            if ($conversationId > 0) {
+                $defaults['conversation_id'] = $conversationId;
+            }
+        }
+
+        if ($request->filled('assigned_user_id')) {
+            $assignedUserId = (int) $request->integer('assigned_user_id');
+            if ($assignedUserId > 0) {
+                $defaults['assigned_user_id'] = $assignedUserId;
+            }
+        }
+
+        if ($request->filled('title')) {
+            $title = trim((string) $request->string('title'));
+            if ($title !== '') {
+                $defaults['title'] = Str::limit($title, 150);
+            }
+        }
+
+        if ($request->has('notes')) {
+            $notes = (string) $request->input('notes');
+            $defaults['notes'] = Str::limit($notes, 2000);
+        }
+
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['open', 'sent', 'completed'], true)) {
+            $defaults['status'] = $request->string('status')->toString();
+        }
+
+        if ($request->filled('priority') && in_array($request->string('priority')->toString(), ['normal', 'high'], true)) {
+            $defaults['priority'] = $request->string('priority')->toString();
+        }
+
+        if ($request->filled('due_at')) {
+            try {
+                $defaults['due_at'] = Carbon::parse($request->string('due_at')->toString());
+            } catch (\Exception) {
+                // keep fallback due_at from model default
+            }
+        }
+
+        return $defaults;
     }
 }

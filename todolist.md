@@ -222,13 +222,13 @@ Definition of done Phase 7:
 - [x] Buat service `AiAutomationApprovalService`.
 - [x] Buat service `AiAutomationExecutorService`.
 - [x] Buat job `ExtractDataFromIncomingMessageJob`.
-- [ ] Buat job `ProcessAiAutomationRuleJob`.
-- [ ] Buat job `CreateCustomerFromAiDataJob`.
-- [ ] Buat job `UpdateCustomerFromAiDataJob`.
-- [ ] Buat job `CreateBookingFromAiDataJob`.
-- [ ] Buat job `CreateFollowupFromAiDataJob`.
-- [ ] Buat job `CreateReminderFromAiDataJob`.
-- [ ] Buat job `CreateAiAutomationApprovalJob`.
+- [x] Buat job `ProcessAiAutomationRuleJob`.
+- [x] Buat job `CreateCustomerFromAiDataJob`.
+- [x] Buat job `UpdateCustomerFromAiDataJob`.
+- [x] Buat job `CreateBookingFromAiDataJob`.
+- [x] Buat job `CreateFollowupFromAiDataJob`.
+- [x] Buat job `CreateReminderFromAiDataJob`.
+- [x] Buat job `CreateAiAutomationApprovalJob`.
 - [x] Buat UI Automation Rules.
 - [x] Buat UI Extracted Data.
 - [x] Buat UI Pending Approval.

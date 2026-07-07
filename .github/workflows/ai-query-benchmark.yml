@@ -1,0 +1,56 @@
+name: AI Query Benchmark
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  benchmark:
+    name: AI Query Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AI_QUERY_BENCHMARK_REPORT: 'true'
+      AI_QUERY_BENCHMARK_MAX_REGRESSION_PERCENT: '0'
+      APP_ENV: testing
+      APP_DEBUG: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+          extensions: pdo, pdo_sqlite
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --optimize-autoloader
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run AI query benchmark
+        run: |
+          mkdir -p storage/logs
+          php artisan test --filter=AiQueryBenchmarkTest
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-query-benchmark-${{ github.run_id }}
+          path: |
+            storage/logs/ai-query-benchmark.json
+            storage/logs/ai-query-benchmark.csv
+          retention-days: 30
+          if-no-files-found: warn

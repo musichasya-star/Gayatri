@@ -18,6 +18,7 @@ class Reminder extends Model
         'channel',
         'status',
         'scheduled_at',
+        'message',
         'sent_at',
         'failed_reason',
         'payload',

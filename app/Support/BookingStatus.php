@@ -36,4 +36,14 @@ final class BookingStatus
             self::NO_SHOW,
         ];
     }
+
+    public static function active(): array
+    {
+        return [
+            self::DRAFT,
+            self::PENDING,
+            self::PENDING_CONFIRMATION,
+            self::CONFIRMED,
+        ];
+    }
 }

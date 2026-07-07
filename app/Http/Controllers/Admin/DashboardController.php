@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiAutomationApproval;
 use App\Models\AiLog;
 use App\Models\Booking;
 use App\Models\Campaign;
@@ -30,6 +31,19 @@ class DashboardController extends Controller
 
         $estimatedRevenue = $revenueBookings->sum(fn (Booking $booking) => max(0, (float) ($booking->service?->price ?? 0) - (float) $booking->promo_discount));
         $trend = $this->trend($start, $end);
+        $incomingBookingStatuses = [BookingStatus::DRAFT, BookingStatus::PENDING, BookingStatus::PENDING_CONFIRMATION];
+        $incomingBookings = Booking::with(['customer', 'service'])
+            ->whereIn('status', $incomingBookingStatuses)
+            ->where('created_at', '>=', now()->subDay())
+            ->latest()
+            ->limit(5)
+            ->get();
+        $incomingApprovals = AiAutomationApproval::with('customer')
+            ->where('status', 'pending')
+            ->whereIn('action', ['reschedule_booking', 'cancel_booking'])
+            ->latest()
+            ->limit(5)
+            ->get();
 
         return view('admin.dashboard', [
             'range' => $request->string('range', 'today')->toString(),
@@ -54,6 +68,10 @@ class DashboardController extends Controller
             'feedbackCount' => Feedback::whereNotNull('rating')->whereBetween('created_at', [$start, $end])->count(),
             'complaintCount' => Feedback::where('status', 'escalated')->whereBetween('created_at', [$start, $end])->count(),
             'trend' => $trend,
+            'incomingBookingCount' => Booking::whereIn('status', $incomingBookingStatuses)->where('created_at', '>=', now()->subDay())->count(),
+            'incomingApprovalCount' => AiAutomationApproval::where('status', 'pending')->whereIn('action', ['reschedule_booking', 'cancel_booking'])->count(),
+            'incomingBookings' => $incomingBookings,
+            'incomingApprovals' => $incomingApprovals,
             'todayBookings' => Booking::with(['customer', 'service'])->whereDate('booking_date', today())->orderBy('start_time')->limit(5)->get(),
             'pendingFollowups' => Followup::with('customer')->where('status', 'open')->orderBy('due_at')->limit(5)->get(),
         ]);

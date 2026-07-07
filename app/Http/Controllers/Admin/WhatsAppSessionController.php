@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\WhatsAppSession;
 use App\Services\WhatsApp\WahaService;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -28,7 +27,7 @@ class WhatsAppSessionController extends Controller
             if ($this->shouldShowQr($remoteSession)) {
                 $qr = $this->wahaService->getQr($sessionName);
             }
-        } catch (RequestException $exception) {
+        } catch (Throwable $exception) {
             $error = $exception->getMessage();
         }
 
@@ -100,17 +99,25 @@ class WhatsAppSessionController extends Controller
 
     private function ensureGatewaySession(string $sessionName): array
     {
-        try {
-            return $this->wahaService->getSession($sessionName);
-        } catch (RequestException $exception) {
-            if ($exception->response?->status() !== 404) {
-                throw $exception;
+        $sessions = $this->wahaService->listSessions();
+        $listedSession = $this->findSession($sessions, $sessionName);
+
+        if ($listedSession !== null) {
+            return $listedSession;
+        }
+
+        return $this->wahaService->createSession($sessionName, $this->sessionConfig());
+    }
+
+    private function findSession(array $sessions, string $sessionName): ?array
+    {
+        foreach ($sessions as $session) {
+            if (is_array($session) && (string) ($session['name'] ?? '') === $sessionName) {
+                return $session;
             }
         }
 
-        $this->wahaService->createSession($sessionName, $this->sessionConfig());
-
-        return $this->wahaService->getSession($sessionName);
+        return null;
     }
 
     private function sessionConfig(): array
@@ -148,9 +155,11 @@ class WhatsAppSessionController extends Controller
             return rtrim($baseUrl, '/').parse_url($url, PHP_URL_PATH);
         }
 
+        $wahaHost = parse_url((string) config('waha.base_url'), PHP_URL_HOST);
         $host = parse_url($url, PHP_URL_HOST);
 
-        if (in_array($host, ['localhost', '127.0.0.1'], true)) {
+        if (in_array((string) $wahaHost, ['localhost', '127.0.0.1'], true)
+            && in_array((string) $host, ['localhost', '127.0.0.1'], true)) {
             return str_replace('://'.$host, '://host.docker.internal', $url);
         }
 

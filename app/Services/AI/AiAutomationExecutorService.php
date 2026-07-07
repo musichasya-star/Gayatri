@@ -6,6 +6,7 @@ use App\Models\AiAutomationLog;
 use App\Models\AiAutomationRule;
 use App\Models\AiExtractedData;
 use App\Models\Booking;
+use App\Models\Customer;
 use App\Models\Followup;
 use App\Services\CRM\BookingService;
 use App\Support\BookingStatus;
@@ -27,6 +28,15 @@ class AiAutomationExecutorService
 
         if (! $rule) {
             return $this->log($extractedData, null, 'skipped', null, null, 'No matching automation rule.');
+        }
+
+        return $this->processWithRule($extractedData, $rule);
+    }
+
+    public function processWithRule(AiExtractedData $extractedData, AiAutomationRule $rule): ?AiAutomationLog
+    {
+        if (! $rule->is_active) {
+            return $this->log($extractedData, $rule, 'skipped', null, null, 'Rule is not active.');
         }
 
         try {
@@ -94,6 +104,11 @@ class AiAutomationExecutorService
                 if (! empty($customerData['address'])) {
                     $updates['address'] = $customerData['address'];
                 }
+                foreach (['phone', 'whatsapp_number'] as $field) {
+                    if (! empty($customerData[$field])) {
+                        $updates[$field] = $customerData[$field];
+                    }
+                }
                 if (! empty($customerData['tags'])) {
                     $updates['tags'] = array_values(array_unique(array_merge($customer->tags ?? [], $customerData['tags'])));
                 }
@@ -123,8 +138,10 @@ class AiAutomationExecutorService
             $this->updateCustomerFromProposedData($extractedData, $proposedData['customer'] ?? []);
 
             $existingBooking = Booking::query()
-                ->where('customer_id', $extractedData->customer_id)
-                ->where('conversation_id', $extractedData->conversation_id)
+                ->where(function ($query) use ($extractedData) {
+                    $query->where('customer_id', $extractedData->customer_id)
+                        ->orWhere('conversation_id', $extractedData->conversation_id);
+                })
                 ->where('service_id', $booking['service_id'] ?? null)
                 ->whereDate('booking_date', $booking['booking_date'] ?? null)
                 ->whereIn('start_time', [$booking['start_time'] ?? null, substr((string) ($booking['start_time'] ?? ''), 0, 5)])
@@ -157,7 +174,7 @@ class AiAutomationExecutorService
         if ($rule->target_entity === 'booking' && $rule->action === 'cancel_booking') {
             $booking = ! empty($proposedData['booking']['booking_id']) ? Booking::find($proposedData['booking']['booking_id']) : null;
 
-            if (! $booking || $booking->customer_id !== $extractedData->customer_id) {
+            if (! $booking || ! $this->bookingMatchesExtractedData($booking, $extractedData)) {
                 return ['cancelled' => false, 'reason' => 'Booking tidak ditemukan.'];
             }
 
@@ -188,6 +205,12 @@ class AiAutomationExecutorService
         if (! empty($customerData['address']) && blank($customer->address)) {
             $updates['address'] = $customerData['address'];
         }
+        if (! empty($customerData['phone'])) {
+            $updates['phone'] = $customerData['phone'];
+        }
+        if (! empty($customerData['whatsapp_number']) && $this->canUseWhatsappNumber((string) $customerData['whatsapp_number'], $customer->id)) {
+            $updates['whatsapp_number'] = $customerData['whatsapp_number'];
+        }
         if (! empty($customerData['tags'])) {
             $updates['tags'] = array_values(array_unique(array_merge($customer->tags ?? [], $customerData['tags'])));
         }
@@ -207,8 +230,10 @@ class AiAutomationExecutorService
         }
 
         $existingBooking = Booking::query()
-            ->where('customer_id', $extractedData->customer_id)
-            ->where('conversation_id', $extractedData->conversation_id)
+            ->where(function ($query) use ($extractedData) {
+                $query->where('customer_id', $extractedData->customer_id)
+                    ->orWhere('conversation_id', $extractedData->conversation_id);
+            })
             ->where('service_id', $booking['service_id'] ?? null)
             ->whereDate('booking_date', $booking['booking_date'] ?? null)
             ->whereIn('start_time', [$booking['start_time'] ?? null, substr((string) ($booking['start_time'] ?? ''), 0, 5)])
@@ -247,6 +272,20 @@ class AiAutomationExecutorService
         return blank($name)
             || str_starts_with($currentName, 'Customer ')
             || Str::contains($name, ['mau ', 'ingin ', 'tanya ', 'booking', 'reservasi', 'baby spa', 'mom massage', 'hari ini', 'besok', 'tanggal', ' jam', ' pukul']);
+    }
+
+    private function canUseWhatsappNumber(string $whatsappNumber, int $customerId): bool
+    {
+        return ! Customer::query()
+            ->where('whatsapp_number', $whatsappNumber)
+            ->whereKeyNot($customerId)
+            ->exists();
+    }
+
+    private function bookingMatchesExtractedData(Booking $booking, AiExtractedData $extractedData): bool
+    {
+        return $booking->customer_id === $extractedData->customer_id
+            || ($booking->conversation_id !== null && $booking->conversation_id === $extractedData->conversation_id);
     }
 
     private function proposedData(AiExtractedData $extractedData, AiAutomationRule $rule): array

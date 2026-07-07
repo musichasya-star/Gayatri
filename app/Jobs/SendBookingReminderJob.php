@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Reminder;
+use App\Services\CRM\ReminderService;
 use App\Services\WhatsApp\WahaService;
 use App\Support\ReminderStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,11 +18,11 @@ class SendBookingReminderJob implements ShouldQueue
 
     public function __construct(private readonly int $reminderId) {}
 
-    public function handle(WahaService $wahaService): void
+    public function handle(WahaService $wahaService, ?ReminderService $reminderService = null): void
     {
         $reminder = Reminder::with(['booking.service', 'customer', 'conversation.whatsappSession'])->find($this->reminderId);
 
-        if (! $reminder || $reminder->status === ReminderStatus::CANCELLED || ! $reminder->customer?->whatsapp_number) {
+        if (! $reminder || $reminder->status === ReminderStatus::CANCELLED) {
             return;
         }
 
@@ -30,7 +31,7 @@ class SendBookingReminderJob implements ShouldQueue
             ->latest('last_message_at')
             ->first();
 
-        if (! $conversation) {
+        if (! $conversation || blank($conversation->wa_chat_id)) {
             $reminder->update(['status' => ReminderStatus::FAILED, 'failed_reason' => 'Conversation WhatsApp tidak ditemukan.']);
 
             return;
@@ -38,7 +39,8 @@ class SendBookingReminderJob implements ShouldQueue
 
         try {
             $session = $conversation->whatsappSession?->session_name ?? config('waha.default_session');
-            $result = $wahaService->sendText($session, $conversation->wa_chat_id, $this->message($reminder));
+            $message = ($reminderService ?? app(ReminderService::class))->buildMessage($reminder);
+            $result = $wahaService->sendText($session, $conversation->wa_chat_id, $message);
 
             Message::create([
                 'conversation_id' => $conversation->id,
@@ -47,7 +49,7 @@ class SendBookingReminderJob implements ShouldQueue
                 'direction' => 'outgoing',
                 'sender_type' => 'system',
                 'message_type' => 'text',
-                'content' => $this->message($reminder),
+                'content' => $message,
                 'payload' => $result,
                 'sent_at' => now(),
             ]);
@@ -63,20 +65,5 @@ class SendBookingReminderJob implements ShouldQueue
                 'failed_reason' => $exception->getMessage(),
             ]);
         }
-    }
-
-    private function message(Reminder $reminder): string
-    {
-        $booking = $reminder->booking;
-        $prefix = $reminder->type === 'h1' ? 'Besok' : 'Hari ini';
-
-        return sprintf(
-            'Halo Bunda %s, reminder dari Gayatri: %s ada jadwal %s pada %s pukul %s. Mohon hadir 10 menit sebelum jadwal ya.',
-            $reminder->customer?->name,
-            $prefix,
-            $booking?->service?->name ?: 'treatment',
-            $booking?->booking_date?->format('d M Y'),
-            substr((string) $booking?->start_time, 0, 5),
-        );
     }
 }

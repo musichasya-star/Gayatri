@@ -14,6 +14,13 @@ use Illuminate\Support\Str;
 
 class AiDataExtractionService
 {
+    private ?array $activeServicesCache = null;
+
+    private function isBenchmarkBaseline(): bool
+    {
+        return config('app.query_benchmark_mode') === 'baseline';
+    }
+
     public function extractFromMessage(Message $message): AiExtractedData
     {
         $message->loadMissing('conversation.customer');
@@ -47,7 +54,7 @@ class AiDataExtractionService
     {
         $normalized = Str::lower($text);
         $intent = $this->detectIntent($normalized);
-        $service = $this->detectService($normalized);
+        $service = $this->isBenchmarkBaseline() ? $this->detectServiceFromDb($normalized) : $this->detectServiceFromCache($normalized);
         $bookingDate = $this->detectBookingDate($normalized);
         $startTime = $this->detectTime($normalized);
         $slotData = $this->detectSlot($service, $bookingDate, $startTime);
@@ -130,6 +137,10 @@ class AiDataExtractionService
             return 'booking_lookup_request';
         }
 
+        if ($this->isOperationalInquiry($text)) {
+            return 'general_inquiry';
+        }
+
         if (Str::contains($text, ['booking', 'jadwal', 'reservasi', 'besok', 'jam ', 'pukul '])) {
             return 'booking_request';
         }
@@ -143,13 +154,50 @@ class AiDataExtractionService
 
     private function detectService(string $text): ?Service
     {
+        return $this->detectServiceFromCache($text);
+    }
+
+    private function detectServiceFromDb(string $text): ?Service
+    {
         return Service::query()
             ->where('is_active', true)
+            ->orderBy('name')
             ->get()
             ->first(function (Service $service) use ($text) {
                 return Str::contains($text, Str::lower($service->name))
-                    || ($service->category && Str::contains($text, Str::lower(str_replace('-', ' ', $service->category))));
+                    || ($service->category && Str::contains($text, Str::lower(str_replace('-', ' ', (string) $service->category))));
             });
+    }
+
+    private function detectServiceFromCache(string $text): ?Service
+    {
+        return collect($this->activeServices())->first(function (Service $service) use ($text) {
+            return Str::contains($text, Str::lower($service->name))
+                || ($service->category && Str::contains($text, Str::lower(str_replace('-', ' ', $service->category))));
+        });
+    }
+
+    private function activeServices(): array
+    {
+        if ($this->isBenchmarkBaseline()) {
+            return Service::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'category'])
+                ->all();
+        }
+
+        if ($this->activeServicesCache !== null) {
+            return $this->activeServicesCache;
+        }
+
+        $this->activeServicesCache = Service::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'category'])
+            ->all();
+
+        return $this->activeServicesCache;
     }
 
     private function detectName(string $text): ?string
@@ -215,6 +263,10 @@ class AiDataExtractionService
 
     private function detectBookingDate(string $text): ?string
     {
+        if (Str::contains($text, ['hari ini', 'hr ini', 'sekarang'])) {
+            return now()->toDateString();
+        }
+
         if (Str::contains($text, 'besok')) {
             return now()->addDay()->toDateString();
         }
@@ -272,6 +324,7 @@ class AiDataExtractionService
         $booking = $result['booking'] ?? [];
         $customerData = $result['customer'] ?? [];
         $customer = $message->conversation?->customer;
+        $activeBooking = $this->isBenchmarkBaseline() ? null : $this->activeBookingFor($message);
 
         if ($this->isRejection($normalized)) {
             $result['booking_confirmation'] = 'rejected';
@@ -306,6 +359,7 @@ class AiDataExtractionService
         }
 
         $latestContext = AiExtractedData::query()
+            ->select('id', 'intent', 'extracted_booking_data', 'extracted_customer_data')
             ->where('conversation_id', $message->conversation_id)
             ->whereIn('intent', ['booking_request', 'booking_reschedule_request', 'booking_cancel_request', 'booking_clarification_required'])
             ->where('message_id', '<', $message->id)
@@ -313,13 +367,14 @@ class AiDataExtractionService
             ->first();
 
         $latestBooking = $latestContext?->extracted_booking_data ?? [];
-
-        $latestCustomer = AiExtractedData::query()
-            ->where('conversation_id', $message->conversation_id)
-            ->whereIn('intent', ['booking_request', 'booking_reschedule_request', 'booking_cancel_request', 'booking_clarification_required'])
-            ->where('message_id', '<', $message->id)
-            ->latest('id')
-            ->value('extracted_customer_data') ?? [];
+        $latestCustomer = $this->isBenchmarkBaseline()
+            ? (AiExtractedData::query()
+                ->where('conversation_id', $message->conversation_id)
+                ->whereIn('intent', ['booking_request', 'booking_reschedule_request', 'booking_cancel_request', 'booking_clarification_required'])
+                ->where('message_id', '<', $message->id)
+                ->latest('id')
+                ->value('extracted_customer_data') ?? [])
+            : ($latestContext?->extracted_customer_data ?? []);
 
         if (($result['intent'] ?? null) === 'booking_request' && $this->isRescheduleChoice($normalized)) {
             $result['intent'] = 'booking_reschedule_request';
@@ -337,7 +392,8 @@ class AiDataExtractionService
         }
 
         if (($result['intent'] ?? null) === 'booking_reschedule_request') {
-            $activeBooking = $this->activeBookingFor($message);
+            $activeBooking ??= $this->activeBookingFor($message);
+
             if ($activeBooking) {
                 $booking['action'] = 'reschedule_booking';
                 $booking['booking_id'] = $activeBooking->id;
@@ -354,8 +410,9 @@ class AiDataExtractionService
             }
         }
 
-        if (($result['intent'] ?? null) === 'booking_request' && $this->needsBookingClarification($message, $normalized, $latestBooking)) {
-            $activeBooking = $this->activeBookingFor($message);
+        if (($result['intent'] ?? null) === 'booking_request' && $this->needsBookingClarification($normalized, $latestBooking, $activeBooking, $message)) {
+            $activeBooking ??= $this->activeBookingFor($message);
+
             if ($activeBooking) {
                 $booking['action'] = 'clarify_booking_or_reschedule';
                 $booking['active_booking_id'] = $activeBooking->id;
@@ -368,7 +425,8 @@ class AiDataExtractionService
         }
 
         if (($result['intent'] ?? null) === 'booking_cancel_request') {
-            $activeBooking = $this->activeBookingFor($message);
+            $activeBooking ??= $this->activeBookingFor($message);
+
             if ($activeBooking) {
                 $booking['action'] = 'cancel_booking';
                 $booking['booking_id'] = $activeBooking->id;
@@ -506,6 +564,11 @@ class AiDataExtractionService
         return Str::contains(Str::lower($text), ['terima kasih', 'makasih', 'thanks', 'thank you']);
     }
 
+    private function isOperationalInquiry(string $text): bool
+    {
+        return Str::contains(Str::lower($text), ['jam buka', 'jam tutup', 'jam operasional', 'operasional jam', 'buka jam', 'tutup jam']);
+    }
+
     private function lastBookingReply(Message $message): ?string
     {
         return Message::query()
@@ -601,14 +664,18 @@ class AiDataExtractionService
         return ($customer !== [] || $booking !== []) ? 0.78 : 0.6;
     }
 
-    private function needsBookingClarification(Message $message, string $text, array $latestBooking = []): bool
+    private function needsBookingClarification(string $text, array $latestBooking = [], ?Booking $activeBooking = null, ?Message $message = null): bool
     {
+        if (! $activeBooking && $message && $this->isBenchmarkBaseline()) {
+            $activeBooking = $this->activeBookingFor($message);
+        }
+
         return ! $this->isNewBookingChoice($text)
             && ! $this->isRescheduleChoice($text)
             && ! $this->isAffirmation($text)
             && ! $this->isRejection($text)
             && ($latestBooking['action'] ?? null) !== 'create_booking_draft'
-            && (bool) $this->activeBookingFor($message);
+            && (bool) $activeBooking;
     }
 
     private function isNewBookingChoice(string $text): bool
@@ -654,8 +721,11 @@ class AiDataExtractionService
 
         return Booking::query()
             ->with('service')
-            ->where('customer_id', $message->customer_id)
-            ->whereIn('status', [BookingStatus::DRAFT, BookingStatus::PENDING, BookingStatus::CONFIRMED])
+            ->where(function ($query) use ($message) {
+                $query->where('customer_id', $message->customer_id)
+                    ->orWhere('conversation_id', $message->conversation_id);
+            })
+            ->whereIn('status', BookingStatus::active())
             ->where(function ($query) {
                 $query->whereDate('booking_date', '>=', now()->toDateString())
                     ->orWhereNull('booking_date');

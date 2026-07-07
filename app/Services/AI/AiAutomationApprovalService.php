@@ -7,6 +7,7 @@ use App\Models\AiAutomationLog;
 use App\Models\AiAutomationRule;
 use App\Models\AiExtractedData;
 use App\Models\Booking;
+use App\Models\Customer;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\CRM\BookingService;
@@ -130,13 +131,16 @@ class AiAutomationApprovalService
         }
 
         $existingBooking = ! empty($booking['booking_id']) ? Booking::find($booking['booking_id']) : null;
+        $approvedStatus = in_array($approval->action, ['create_booking_draft', 'create_booking_confirmed'], true)
+            ? BookingStatus::CONFIRMED
+            : BookingStatus::DRAFT;
         if ($existingBooking) {
-            if ($existingBooking->customer_id !== $approval->customer_id) {
+            if (! $this->bookingMatchesApproval($existingBooking, $approval)) {
                 throw new InvalidArgumentException('Booking pending tidak sesuai customer.');
             }
 
             $updated = $this->bookingService->update($existingBooking, [
-                'customer_id' => $approval->customer_id,
+                'customer_id' => $existingBooking->customer_id,
                 'service_id' => $service->id,
                 'branch_id' => $booking['branch_id'] ?? $service->branch_id,
                 'therapist_id' => $booking['therapist_id'] ?? null,
@@ -144,7 +148,7 @@ class AiAutomationApprovalService
                 'availability_slot_id' => $booking['availability_slot_id'] ?? null,
                 'booking_date' => $booking['booking_date'],
                 'start_time' => $booking['start_time'],
-                'status' => 'draft',
+                'status' => $approvedStatus,
                 'payment_status' => $existingBooking->payment_status,
                 'notes' => trim(($existingBooking->notes ? $existingBooking->notes."\n" : '').'Booking disetujui dari AI Data Automation approval #'.$approval->id),
             ]);
@@ -161,7 +165,7 @@ class AiAutomationApprovalService
             'availability_slot_id' => $booking['availability_slot_id'] ?? null,
             'booking_date' => $booking['booking_date'],
             'start_time' => $booking['start_time'],
-            'status' => 'draft',
+            'status' => $approvedStatus,
             'payment_status' => 'unpaid',
             'source' => 'ai_approval',
             'notes' => 'Booking dibuat dari AI Data Automation approval #'.$approval->id,
@@ -178,7 +182,7 @@ class AiAutomationApprovalService
 
         $bookingId = data_get($approval->proposed_data, 'booking.booking_id');
         $booking = $bookingId ? Booking::find($bookingId) : null;
-        if (! $booking || $booking->customer_id !== $approval->customer_id || $booking->status !== BookingStatus::PENDING) {
+        if (! $booking || ! $this->bookingMatchesApproval($booking, $approval) || $booking->status !== BookingStatus::PENDING) {
             return;
         }
 
@@ -190,7 +194,7 @@ class AiAutomationApprovalService
         $bookingData = $data['booking'] ?? [];
         $bookingModel = ! empty($bookingData['booking_id']) ? Booking::find($bookingData['booking_id']) : null;
 
-        if (! $bookingModel || $bookingModel->customer_id !== $approval->customer_id) {
+        if (! $bookingModel || ! $this->bookingMatchesApproval($bookingModel, $approval)) {
             throw new InvalidArgumentException('Booking yang akan diubah tidak ditemukan.');
         }
 
@@ -226,7 +230,7 @@ class AiAutomationApprovalService
         $bookingData = $data['booking'] ?? [];
         $bookingModel = ! empty($bookingData['booking_id']) ? Booking::find($bookingData['booking_id']) : null;
 
-        if (! $bookingModel || $bookingModel->customer_id !== $approval->customer_id) {
+        if (! $bookingModel || ! $this->bookingMatchesApproval($bookingModel, $approval)) {
             throw new InvalidArgumentException('Booking yang akan dibatalkan tidak ditemukan.');
         }
 
@@ -254,6 +258,12 @@ class AiAutomationApprovalService
         if (! empty($customerData['address']) && blank($customer->address)) {
             $updates['address'] = $customerData['address'];
         }
+        if (! empty($customerData['phone'])) {
+            $updates['phone'] = $customerData['phone'];
+        }
+        if (! empty($customerData['whatsapp_number']) && ! Customer::query()->where('whatsapp_number', $customerData['whatsapp_number'])->whereKeyNot($customer->id)->exists()) {
+            $updates['whatsapp_number'] = $customerData['whatsapp_number'];
+        }
         if (! empty($customerData['tags'])) {
             $updates['tags'] = array_values(array_unique(array_merge($customer->tags ?? [], $customerData['tags'])));
         }
@@ -262,6 +272,12 @@ class AiAutomationApprovalService
             $updates['status'] = CustomerStatus::LEAD;
             $customer->update($updates);
         }
+    }
+
+    private function bookingMatchesApproval(Booking $booking, AiAutomationApproval $approval): bool
+    {
+        return $booking->customer_id === $approval->customer_id
+            || ($booking->conversation_id !== null && $booking->conversation_id === $approval->conversation_id);
     }
 
     private function approveCustomerUpdate(AiAutomationApproval $approval, array $data): array

@@ -33,6 +33,54 @@
         <div class="card" style="margin-top:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;"><span><strong>Reliability Alert:</strong> {{ $wahaDisconnected }} session WAHA tidak connected, {{ $failedOutgoingMessages }} pesan outgoing gagal.</span><a class="button button-secondary" href="{{ route('admin.whatsapp.session') }}">Cek WAHA</a></div></div>
     @endif
 
+    @if($incomingBookingCount > 0 || $incomingApprovalCount > 0)
+        <div id="notifikasi-operasional" class="card" style="margin-top:1rem;border-color:rgba(201,122,106,.45);background:linear-gradient(135deg,rgba(255,248,240,.96),rgba(255,255,255,.98));">
+            <div class="card-body">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <div>
+                        <span class="badge badge-red"><i data-lucide="bell-ring"></i> Notifikasi Operasional</span>
+                        <h2 class="section-title" style="margin-top:.65rem;">{{ $incomingBookingCount + $incomingApprovalCount }} request customer perlu dicek</h2>
+                        <p style="margin:0;color:var(--muted);">Booking baru, perubahan jadwal, dan pembatalan dari customer yang masih perlu tindakan admin.</p>
+                    </div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                        <a class="button button-secondary" href="{{ route('admin.bookings.index') }}"><i data-lucide="calendar-check"></i> Lihat Booking</a>
+                        <a class="button button-secondary" href="{{ route('admin.ai.data-automation.approvals.index') }}"><i data-lucide="workflow"></i> Review Request</a>
+                    </div>
+                </div>
+                <ul class="soft-list">
+                    @foreach($incomingBookings as $booking)
+                        <li class="soft-list-item">
+                            <span>
+                                <span class="badge badge-green">Booking baru</span>
+                                <strong>{{ $booking->customer?->name ?: 'Customer' }}</strong>
+                                - {{ $booking->booking_code }}
+                                - {{ $booking->service?->name ?: 'Layanan belum dipilih' }}
+                                - {{ $booking->booking_date?->format('d M Y') ?: '-' }} {{ substr((string) $booking->start_time, 0, 5) ?: '-' }}
+                            </span>
+                            <span class="badge badge-gold">{{ $booking->status }}</span>
+                        </li>
+                    @endforeach
+                    @foreach($incomingApprovals as $approval)
+                        @php($bookingData = $approval->proposed_data['booking'] ?? [])
+                        <li class="soft-list-item">
+                            <span>
+                                <span class="badge {{ $approval->action === 'cancel_booking' ? 'badge-red' : 'badge-gold' }}">{{ $approval->action === 'cancel_booking' ? 'Request pembatalan' : 'Perubahan jadwal' }}</span>
+                                <strong>{{ $approval->customer?->name ?: 'Customer' }}</strong>
+                                - {{ $bookingData['booking_code'] ?? 'Booking' }}
+                                @if($approval->action === 'reschedule_booking')
+                                    - dari {{ $bookingData['current_booking_date'] ?? '-' }} {{ substr((string) ($bookingData['current_start_time'] ?? ''), 0, 5) }} ke {{ $bookingData['booking_date'] ?? '-' }} {{ substr((string) ($bookingData['start_time'] ?? ''), 0, 5) }}
+                                @else
+                                    - {{ $bookingData['booking_date'] ?? $bookingData['active_booking_date'] ?? '-' }} {{ substr((string) ($bookingData['start_time'] ?? $bookingData['active_start_time'] ?? ''), 0, 5) }}
+                                @endif
+                            </span>
+                            <a class="button button-secondary" href="{{ route('admin.ai.data-automation.approvals.show', $approval) }}">Review</a>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
+
     <section class="grid grid-3" style="margin-top: 1rem;">
         <div class="card" style="grid-column: span 2;">
             <div class="card-body">

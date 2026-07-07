@@ -13,6 +13,7 @@ use App\Support\CustomerStatus;
 use App\Support\UserRole;
 use App\Support\UserStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -81,7 +82,47 @@ class WahaIntegrationTest extends TestCase
 
         Http::assertSent(fn ($request) => $request->method() === 'PUT'
             && $request->url() === 'http://waha.test/api/sessions/default'
-            && data_get($request->data(), 'config.webhooks.0.url') === 'http://host.docker.internal/webhooks/waha/messages');
+            && data_get($request->data(), 'config.webhooks.0.url') === route('webhooks.waha.messages'));
+    }
+
+    public function test_gateway_page_uses_configured_webhook_base_url_if_set(): void
+    {
+        $admin = User::factory()->create([
+            'role' => UserRole::ADMIN,
+            'status' => UserStatus::ACTIVE,
+        ]);
+
+        config()->set('waha.webhook_base_url', 'https://7digital-solution.web.id');
+
+        Http::fake([
+            'http://waha.test/api/sessions' => Http::response([
+                [
+                    'name' => 'default',
+                    'status' => 'SCAN_QR_CODE',
+                    'me' => null,
+                ],
+            ], 200),
+            'http://waha.test/api/sessions/default' => Http::response([
+                'name' => 'default',
+                'status' => 'SCAN_QR_CODE',
+                'me' => null,
+            ], 200),
+            'http://waha.test/api/default/auth/qr*' => Http::response('fake-png-binary', 200, ['Content-Type' => 'image/png']),
+            'http://waha.test/api/sessions/default/start' => Http::response([
+                'name' => 'default',
+                'status' => 'STARTING',
+            ], 200),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.whatsapp.session.start'), [
+                'session_name' => 'default',
+            ])
+            ->assertRedirect(route('admin.whatsapp.session'));
+
+        Http::assertSent(fn ($request) => $request->method() === 'PUT'
+            && $request->url() === 'http://waha.test/api/sessions/default'
+            && data_get($request->data(), 'config.webhooks.0.url') === 'https://7digital-solution.web.id/webhooks/waha/messages');
     }
 
     public function test_gateway_page_renders_binary_qr_from_latest_waha(): void
@@ -92,6 +133,13 @@ class WahaIntegrationTest extends TestCase
         ]);
 
         Http::fake([
+            'http://waha.test/api/sessions' => Http::response([
+                [
+                    'name' => 'default',
+                    'status' => 'SCAN_QR_CODE',
+                    'me' => null,
+                ],
+            ], 200),
             'http://waha.test/api/sessions/default' => Http::response([
                 'name' => 'default',
                 'status' => 'SCAN_QR_CODE',
@@ -104,6 +152,22 @@ class WahaIntegrationTest extends TestCase
             ->get(route('admin.whatsapp.session'))
             ->assertOk()
             ->assertSee('data:image/png;base64,'.base64_encode('fake-png-binary'), false);
+    }
+
+    public function test_gateway_page_shows_error_instead_of_crashing_when_waha_times_out(): void
+    {
+        $admin = User::factory()->create([
+            'role' => UserRole::ADMIN,
+            'status' => UserStatus::ACTIVE,
+        ]);
+
+        Http::fake(fn () => throw new ConnectionException('Connection timed out'));
+
+        $this->actingAs($admin)
+            ->get(route('admin.whatsapp.session'))
+            ->assertOk()
+            ->assertSee('Session WAHA')
+            ->assertSee('Connection timed out');
     }
 
     public function test_message_webhook_creates_customer_conversation_and_message(): void
@@ -145,6 +209,49 @@ class WahaIntegrationTest extends TestCase
             'wa_message_id' => 'wamid-001',
             'direction' => 'incoming',
             'content' => 'Halo, saya mau tanya jadwal.',
+        ]);
+    }
+
+    public function test_existing_lid_conversation_keeps_linked_manual_whatsapp_customer(): void
+    {
+        $manualCustomer = Customer::create([
+            'name' => 'Budiman',
+            'phone' => '629984970786',
+            'whatsapp_number' => '629984970786',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $manualCustomer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '151152817635490@lid',
+            'channel' => 'whatsapp',
+            'status' => 'open',
+            'ai_enabled' => true,
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-lid-existing-001',
+                    'timestamp' => 1710000000,
+                    'from' => '151152817635490@lid',
+                    'fromMe' => false,
+                    'body' => 'cek data reservasi saya',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertSame($manualCustomer->id, $conversation->fresh()->customer_id);
+        $this->assertDatabaseMissing('customers', ['whatsapp_number' => '151152817635490']);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'customer_id' => $manualCustomer->id,
+            'wa_message_id' => 'wamid-lid-existing-001',
+            'content' => 'cek data reservasi saya',
         ]);
     }
 

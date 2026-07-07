@@ -129,7 +129,7 @@ class SettingsManagementTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         Http::fake([
-            'http://waha.test/api/sessions/' => Http::response([['name' => 'default']], 200),
+            'http://waha.test/api/sessions' => Http::response([['name' => 'default']], 200),
         ]);
 
         $this->actingAs($admin)
@@ -137,6 +137,7 @@ class SettingsManagementTest extends TestCase
                 'base_url' => 'http://waha.test',
                 'api_key' => 'waha-secret',
                 'default_session' => 'default',
+                'webhook_base_url' => '',
                 'webhook_secret' => 'webhook-secret',
                 'timeout' => 15,
             ])
@@ -145,6 +146,7 @@ class SettingsManagementTest extends TestCase
         $this->assertDatabaseHas('app_settings', ['key' => 'waha.base_url', 'value' => 'http://waha.test']);
         $this->assertNotSame('waha-secret', AppSetting::where('key', 'waha.api_key')->value('value'));
         $this->assertSame('waha-secret', app(AppSettingService::class)->get('waha.api_key'));
+        $this->assertNull(AppSetting::where('key', 'waha.webhook_base_url')->value('value'));
 
         $this->actingAs($admin)
             ->post(route('admin.settings.waha.test'))
@@ -154,6 +156,28 @@ class SettingsManagementTest extends TestCase
         Http::assertSent(fn ($request) => $request->hasHeader('X-Api-Key', 'waha-secret'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.waha.update']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.waha.test_success']);
+    }
+
+    public function test_admin_can_save_waha_webhook_base_url(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.settings.waha.update'), [
+                'base_url' => 'https://7digital-solution.web.id',
+                'api_key' => '',
+                'default_session' => 'default',
+                'webhook_base_url' => 'https://7digital-solution.web.id',
+                'webhook_secret' => '',
+                'timeout' => 15,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('app_settings', [
+            'key' => 'waha.webhook_base_url',
+            'value' => 'https://7digital-solution.web.id',
+        ]);
+        $this->assertSame('https://7digital-solution.web.id', app(AppSettingService::class)->get('waha.webhook_base_url'));
     }
 
     public function test_sales_cannot_access_settings(): void
