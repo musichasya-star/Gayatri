@@ -1,0 +1,16 @@
+[Unit]
+Description=Gayatri Laravel Scheduler
+After=network.target mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/www/gayatri/current
+ExecStart=/usr/bin/php artisan schedule:work
+StandardOutput=append:/var/log/gayatri/scheduler.log
+StandardError=append:/var/log/gayatri/scheduler-error.log
+
+[Install]
+WantedBy=multi-user.target

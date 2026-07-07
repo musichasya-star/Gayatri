@@ -1,0 +1,17 @@
+[Unit]
+Description=Gayatri Laravel Queue Worker
+After=network.target mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/www/gayatri/current
+ExecStart=/usr/bin/php artisan queue:work database --sleep=3 --tries=3 --timeout=120 --max-time=3600
+ExecReload=/usr/bin/php artisan queue:restart
+StandardOutput=append:/var/log/gayatri/queue.log
+StandardError=append:/var/log/gayatri/queue-error.log
+
+[Install]
+WantedBy=multi-user.target
