@@ -30,8 +30,11 @@ class KnowledgeRetrievalService
 
         return $knowledge
             ->map(function (KnowledgeBase $item) use ($terms) {
-                $haystack = Str::lower($item->title.' '.$item->content.' '.$item->chunks->pluck('content')->implode(' '));
-                $score = $terms->sum(fn (string $term) => Str::contains($haystack, $term) ? 1 : 0);
+                $title = Str::lower($item->title.' '.$item->slug);
+                $body = Str::lower((string) $item->content.' '.$item->chunks->pluck('content')->implode(' '));
+                $score = $terms->sum(function (string $term) use ($title, $body) {
+                    return $this->termScore($title, $term, 3) + $this->termScore($body, $term);
+                });
 
                 $item->setAttribute('relevance_score', $score);
 
@@ -41,5 +44,14 @@ class KnowledgeRetrievalService
             ->sortByDesc('relevance_score')
             ->take($limit)
             ->values();
+    }
+
+    private function termScore(string $haystack, string $term, int $weight = 1): int
+    {
+        if (preg_match('/(?<![\pL\pN])'.preg_quote($term, '/').'(?![\pL\pN])/u', $haystack) === 1) {
+            return $weight;
+        }
+
+        return 0;
     }
 }

@@ -245,6 +245,57 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('teruskan ke admin', strtolower($reply));
     }
 
+    public function test_member_card_question_uses_member_card_knowledge_first(): void
+    {
+        $this->seedAiSetup();
+        KnowledgeBase::create([
+            'title' => 'Benefit Member Card',
+            'slug' => 'benefit-member-card',
+            'type' => 'text',
+            'content' => 'Kartu bisa ditukar dengan diskon di merchant Gayatri Mom & Baby SPA. Pemilik kartu berhak mendapatkan 1 poin dengan minimal transaksi Rp 40.000 berlaku kelipatan. Pemilik kartu berhak mendapatkan diskon 50% treatment dengan total 50 poin.',
+            'status' => 'active',
+        ])->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'Kartu bisa ditukar dengan diskon di merchant Gayatri Mom & Baby SPA. Pemilik kartu berhak mendapatkan 1 poin dengan minimal transaksi Rp 40.000 berlaku kelipatan.',
+            'token_count' => 22,
+        ]);
+        KnowledgeBase::create([
+            'title' => 'Tentang Gayatri',
+            'slug' => 'tentang-gayatri',
+            'type' => 'text',
+            'content' => 'Gayatri Mom & Baby SPA adalah pertama dan satu-satunya Baby SPA di Kediri yang memberikan pelayanan aman.',
+            'status' => 'active',
+        ])->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'Gayatri Mom & Baby SPA adalah pertama dan satu-satunya Baby SPA di Kediri yang memberikan pelayanan aman.',
+            'token_count' => 14,
+        ]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-member-card-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-member-card-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450035@c.us',
+                    'fromMe' => false,
+                    'body' => 'jelaskan tentang member card',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450035@c.us')->firstOrFail();
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
+
+        $this->assertStringContainsString('Member Card', $reply);
+        $this->assertStringContainsString('diskon', strtolower($reply));
+        $this->assertStringNotContainsString('pertama dan satu-satunya', strtolower($reply));
+    }
+
     public function test_pesan_baby_spa_starts_step_booking_flow_without_old_template(): void
     {
         $this->seedAiSetup();
