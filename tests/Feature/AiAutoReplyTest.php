@@ -457,6 +457,93 @@ class AiAutoReplyTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_availability_question_does_not_reuse_previous_cancel_context(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-08 21:32:00', config('app.timezone')));
+
+        $this->seedAiSetup();
+        $service = Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '09:00:00',
+            'end_time' => '10:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        $customer = Customer::create(['name' => 'Bunda Schedule Context', 'whatsapp_number' => '628123450040', 'status' => CustomerStatus::LEAD]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450040@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::AI_HANDLED,
+            'ai_enabled' => true,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'service_id' => $service->id,
+            'booking_code' => 'BK-SCHEDULE-CONTEXT',
+            'booking_date' => now()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => 'unpaid',
+            'source' => 'manual',
+        ]);
+        AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_cancel_request',
+            'confidence_score' => 0.95,
+            'extracted_customer_data' => [],
+            'extracted_booking_data' => [
+                'action' => 'cancel_booking',
+                'booking_id' => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'booking_status' => BookingStatus::CONFIRMED,
+                'service_id' => $service->id,
+                'service_name' => $service->name,
+                'booking_date' => $booking->booking_date?->toDateString(),
+                'start_time' => $booking->start_time,
+            ],
+            'missing_fields' => [],
+            'raw_ai_response' => [],
+            'status' => 'awaiting_confirmation',
+        ]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-schedule-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-schedule-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450040@c.us',
+                    'fromMe' => false,
+                    'body' => 'jadwal yang ready untuk baby spa kapan ?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->latest('id')->value('content');
+
+        $this->assertStringContainsString('Slot yang tersedia terdekat', $reply);
+        $this->assertStringContainsString('Baby Spa Premium', $reply);
+        $this->assertStringContainsString('09:00', $reply);
+        $this->assertStringNotContainsString('reservasi yang akan dibatalkan', strtolower($reply));
+        $this->assertStringNotContainsString('Iya batalkan', $reply);
+        $this->assertSame('local', data_get($conversation->aiLogs()->latest('id')->first()->meta, 'reply_source'));
+
+        Carbon::setTestNow();
+    }
+
     public function test_member_card_question_uses_member_card_knowledge_first(): void
     {
         $this->seedAiSetup();

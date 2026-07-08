@@ -60,7 +60,7 @@ class AiService
             $conversationalIntent = $this->isConversationalMessage($message);
             $bookingLookupIntent = ($extraction['intent'] ?? null) === 'booking_lookup_request';
             $bookingIntent = Str::contains($text, ['booking', 'reservasi', 'pesan jadwal', 'mau daftar', 'pesan baby spa', 'pesan treatment', 'pesan layanan', 'batalkan', 'batal booking', 'batal reservasi', 'cancel booking']) || $bookingContext !== [] || $bookingLookupIntent;
-            $scheduleIntent = Str::contains($text, ['ready', 'tersedia', 'kosong', 'ada jadwal', 'hari apa', 'kapan bisa', 'jadwal']);
+            $scheduleIntent = $this->isAvailabilityInquiry($text) || Str::contains($text, ['hari apa', 'jadwal']);
             $serviceInquiryIntent = Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi']);
             $operationalIntent = $this->isOperationalInquiry($message);
             $guardrail = $this->guardrail->check($message, $knowledge->isNotEmpty() || $promoIntent || $conversationalIntent || $bookingIntent || $scheduleIntent || $serviceInquiryIntent || $operationalIntent);
@@ -134,7 +134,7 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingConfirmationReply($bookingContext), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if ($serviceListQuestion || ($serviceInquiryIntent && ! $knowledgeQuestion && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty()))) {
+            if (! $scheduleIntent && ($serviceListQuestion || ($serviceInquiryIntent && ! $knowledgeQuestion && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())))) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->buildLocalReply($message, $persona, ''), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -203,7 +203,7 @@ class AiService
             return 'Baik Bunda, saya bantu proses booking secara bertahap ya. Boleh tuliskan nama reservasi dulu?';
         }
 
-        if ($this->isServiceListQuestion($text) || (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi']) && ! $this->isKnowledgeQuestion($text))) {
+        if (! $this->isAvailabilityInquiry($text) && ($this->isServiceListQuestion($text) || (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi']) && ! $this->isKnowledgeQuestion($text)))) {
             return $this->servicesReply();
         }
 
@@ -295,9 +295,21 @@ class AiService
         }
 
         return $this->isKnowledgeQuestion($text)
+            || $this->isServiceListQuestion($text)
+            || $this->isAvailabilityInquiry($text)
             || $this->isCurrentTimeQuestion($text)
             || $this->isConversationalMessage($text)
             || $this->isOperationalInquiry($text);
+    }
+
+    private function isAvailabilityInquiry(string $text): bool
+    {
+        if ($this->isServiceListQuestion($text)) {
+            return false;
+        }
+
+        return Str::contains($text, ['ready', 'tersedia', 'kosong', 'ada jadwal', 'kapan bisa', 'jadwal ready', 'jadwal yang ready', 'jadwal tersedia'])
+            || (Str::contains($text, ['jadwal']) && Str::contains($text, ['baby spa', 'spa bayi', 'mom massage', 'massage', 'pijat']));
     }
 
     private function isCurrentTimeQuestion(string $text): bool
