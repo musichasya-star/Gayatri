@@ -143,9 +143,10 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingMissingFieldsReply($bookingContext['missing_fields']), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            $knowledgeText = $knowledge->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
-            $providerReply = $this->buildProviderReply($message, $persona, $knowledgeText);
-            $reply = $providerReply ?: $this->buildLocalReply($message, $persona, $knowledgeText);
+            $providerKnowledgeText = $knowledge->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
+            $localKnowledgeText = $knowledge->take(1)->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
+            $providerReply = $this->buildProviderReply($message, $persona, $providerKnowledgeText);
+            $reply = $providerReply ?: $this->buildLocalReply($message, $persona, $localKnowledgeText);
             $context['reply_source'] = $providerReply ? 'provider' : 'local';
 
             return $this->logAndReturn($message, $persona, $knowledge->first(), $reply, 0.85, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -397,10 +398,10 @@ class AiService
             ->map(fn (string $line) => trim($line))
             ->filter()
             ->reject(fn (string $line) => Str::contains(Str::lower($line), ['demam', 'sakit', 'keluhan kesehatan', 'dokter']))
-            ->take(2)
+            ->take(6)
             ->implode(' ');
 
-        return Str::limit(preg_replace('/\s+/', ' ', $lines), 220);
+        return Str::limit(preg_replace('/\s+/', ' ', $lines), 480);
     }
 
     private function activeBranchSummaries(): string

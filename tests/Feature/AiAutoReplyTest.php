@@ -293,6 +293,8 @@ class AiAutoReplyTest extends TestCase
 
         $this->assertStringContainsString('Member Card', $reply);
         $this->assertStringContainsString('diskon', strtolower($reply));
+        $this->assertStringContainsString('1 poin', strtolower($reply));
+        $this->assertStringContainsString('50%', $reply);
         $this->assertStringNotContainsString('pertama dan satu-satunya', strtolower($reply));
     }
 
