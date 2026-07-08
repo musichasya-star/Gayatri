@@ -192,7 +192,7 @@ class AiAutomationApprovalService
     private function approveBookingReschedule(AiAutomationApproval $approval, array $data): array
     {
         $bookingData = $data['booking'] ?? [];
-        $bookingModel = ! empty($bookingData['booking_id']) ? Booking::find($bookingData['booking_id']) : null;
+        $bookingModel = $this->bookingFromApprovalData($bookingData);
 
         if (! $bookingModel || ! $this->bookingMatchesApproval($bookingModel, $approval)) {
             throw new InvalidArgumentException('Booking yang akan diubah tidak ditemukan.');
@@ -228,7 +228,7 @@ class AiAutomationApprovalService
     private function approveBookingCancel(AiAutomationApproval $approval, array $data): array
     {
         $bookingData = $data['booking'] ?? [];
-        $bookingModel = ! empty($bookingData['booking_id']) ? Booking::find($bookingData['booking_id']) : null;
+        $bookingModel = $this->bookingFromApprovalData($bookingData);
 
         if (! $bookingModel || ! $this->bookingMatchesApproval($bookingModel, $approval)) {
             throw new InvalidArgumentException('Booking yang akan dibatalkan tidak ditemukan.');
@@ -272,6 +272,23 @@ class AiAutomationApprovalService
             $updates['status'] = CustomerStatus::LEAD;
             $customer->update($updates);
         }
+    }
+
+    private function bookingFromApprovalData(array $bookingData): ?Booking
+    {
+        if (! empty($bookingData['booking_id'])) {
+            $booking = Booking::find($bookingData['booking_id']);
+
+            if ($booking) {
+                return $booking;
+            }
+        }
+
+        if (! empty($bookingData['booking_code'])) {
+            return Booking::where('booking_code', $bookingData['booking_code'])->latest('id')->first();
+        }
+
+        return null;
     }
 
     private function bookingMatchesApproval(Booking $booking, AiAutomationApproval $approval): bool

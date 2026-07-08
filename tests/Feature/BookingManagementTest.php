@@ -360,6 +360,67 @@ class BookingManagementTest extends TestCase
         ]);
     }
 
+    public function test_review_request_cancel_approval_updates_booking_status(): void
+    {
+        config()->set('waha.base_url', 'http://waha.test');
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-booking-cancelled-review'], 200)]);
+
+        [$admin, $customer, $branch, $service, $therapist] = $this->seedBookingData();
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => $customer->whatsapp_number.'@c.us',
+            'channel' => 'whatsapp',
+            'status' => 'open',
+            'ai_enabled' => true,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'conversation_id' => $conversation->id,
+            'created_by' => $admin->id,
+            'booking_code' => 'BK-REVIEW-CANCEL-001',
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '10:00:00',
+            'end_time' => '11:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => PaymentStatus::UNPAID,
+            'source' => 'manual',
+        ]);
+        $extracted = AiExtractedData::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'intent' => 'booking_cancel_request',
+            'confidence_score' => 0.95,
+            'status' => 'pending_approval',
+        ]);
+        $approval = AiAutomationApproval::create([
+            'ai_extracted_data_id' => $extracted->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'target_entity' => 'booking',
+            'action' => 'cancel_booking',
+            'mode' => 'need_confirmation',
+            'proposed_data' => ['booking' => [
+                'booking_code' => $booking->booking_code,
+                'service_name' => $service->name,
+                'booking_date' => $booking->booking_date?->toDateString(),
+                'start_time' => $booking->start_time,
+            ]],
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.ai.data-automation.approvals.approve', $approval))
+            ->assertRedirect(route('admin.ai.data-automation.approvals.index'));
+
+        $this->assertSame('approved', $approval->fresh()->status);
+        $this->assertSame(BookingStatus::CANCELLED, $booking->fresh()->status);
+    }
+
     public function test_approval_reschedule_allows_manual_customer_booking_on_lid_conversation(): void
     {
         config()->set('waha.base_url', 'http://waha.test');
