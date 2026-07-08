@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AiPersona;
+use App\Models\AiExtractedData;
 use App\Models\AvailabilitySlot;
 use App\Models\Booking;
 use App\Models\Conversation;
@@ -278,6 +279,104 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringContainsString('reservasi', strtolower($reply));
         $this->assertStringNotContainsString('Slot yang tersedia', $reply);
         $this->assertStringNotContainsString('09:00', $reply);
+    }
+
+    public function test_service_detail_question_does_not_reuse_previous_cancel_context(): void
+    {
+        $this->seedAiSetup();
+        app(AppSettingService::class)->setMany([
+            'ai.provider' => 'openrouter',
+            'ai.model' => 'openai/gpt-4o-mini',
+            'ai.temperature' => 0.3,
+            'ai.max_tokens' => 800,
+        ]);
+        app(AppSettingService::class)->set('ai.api_key', 'sk-openrouter-test');
+
+        $service = Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Bunda Cancel Context', 'whatsapp_number' => '628123450038', 'status' => CustomerStatus::LEAD]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450038@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::AI_HANDLED,
+            'ai_enabled' => true,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'service_id' => $service->id,
+            'booking_code' => 'BK-CANCEL-CONTEXT',
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => 'unpaid',
+            'source' => 'manual',
+        ]);
+        AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_cancel_request',
+            'confidence_score' => 0.95,
+            'extracted_customer_data' => [],
+            'extracted_booking_data' => [
+                'action' => 'cancel_booking',
+                'booking_id' => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'booking_status' => BookingStatus::CONFIRMED,
+                'service_id' => $service->id,
+                'service_name' => $service->name,
+                'booking_date' => $booking->booking_date?->toDateString(),
+                'start_time' => $booking->start_time,
+            ],
+            'missing_fields' => [],
+            'raw_ai_response' => [],
+            'status' => 'awaiting_confirmation',
+        ]);
+        KnowledgeBase::create([
+            'title' => 'Baby Spa Premium',
+            'slug' => 'baby-spa-premium',
+            'type' => 'text',
+            'content' => 'Baby Spa Premium adalah layanan hydrotherapy dan pijat lembut bayi untuk membantu relaksasi dan kenyamanan si kecil.',
+            'status' => 'active',
+        ])->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'Baby Spa Premium adalah layanan hydrotherapy dan pijat lembut bayi.',
+            'token_count' => 9,
+        ]);
+
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => ['content' => 'Baby Spa Premium adalah layanan hydrotherapy dan pijat lembut bayi untuk membantu relaksasi si kecil, Bunda.'],
+                ]],
+            ], 200),
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-service-detail-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-service-detail-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450038@c.us',
+                    'fromMe' => false,
+                    'body' => 'jelaskan tentang baby spa premium',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->latest('id')->value('content');
+
+        $this->assertStringContainsString('Baby Spa Premium adalah layanan hydrotherapy', $reply);
+        $this->assertStringNotContainsString('reservasi yang akan dibatalkan', strtolower($reply));
+        $this->assertStringNotContainsString('Iya batalkan', $reply);
+        $this->assertSame('provider', data_get($conversation->aiLogs()->latest('id')->first()->meta, 'reply_source'));
     }
 
     public function test_member_card_question_uses_member_card_knowledge_first(): void

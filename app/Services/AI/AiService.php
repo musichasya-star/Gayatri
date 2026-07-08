@@ -47,8 +47,14 @@ class AiService
         try {
             $knowledge = $this->knowledgeRetrieval->retrieve($message);
             $text = $this->normalizeServiceTerms($message);
-            $extraction = $this->extractionForContext($message, $context);
-            $bookingContext = $this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message);
+            $knowledgeQuestion = $this->isKnowledgeQuestion($text);
+            $serviceListQuestion = $this->isServiceListQuestion($text);
+            $extraction = $knowledgeQuestion
+                ? app(AiDataExtractionService::class)->extract($message)
+                : $this->extractionForContext($message, $context);
+            $bookingContext = $knowledgeQuestion
+                ? []
+                : ($this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message));
             $promoIntent = Str::contains($text, ['promo', 'diskon', 'voucher', 'voucer']);
             $conversationalIntent = $this->isConversationalMessage($message);
             $bookingLookupIntent = ($extraction['intent'] ?? null) === 'booking_lookup_request';
@@ -121,7 +127,7 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingConfirmationReply($bookingContext), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if ($serviceInquiryIntent && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())) {
+            if ($serviceListQuestion || ($serviceInquiryIntent && ! $knowledgeQuestion && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty()))) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->buildLocalReply($message, $persona, ''), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -190,7 +196,7 @@ class AiService
             return 'Baik Bunda, saya bantu proses booking secara bertahap ya. Boleh tuliskan nama reservasi dulu?';
         }
 
-        if (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
+        if ($this->isServiceListQuestion($text) || (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi']) && ! $this->isKnowledgeQuestion($text))) {
             return $this->servicesReply();
         }
 
@@ -259,6 +265,16 @@ class AiService
         }
 
         return $response ? $this->extractProviderReply($provider, $response) : null;
+    }
+
+    private function isKnowledgeQuestion(string $text): bool
+    {
+        return Str::contains($text, ['jelaskan', 'penjelasan', 'detail', 'tentang', 'apa itu', 'info tentang', 'manfaat', 'keunggulan']);
+    }
+
+    private function isServiceListQuestion(string $text): bool
+    {
+        return Str::contains($text, ['layanan apa', 'layanan yang tersedia', 'layanan tersedia', 'apa saja layanan', 'daftar layanan', 'pilihan layanan']);
     }
 
     private function answerKnowledge($knowledge)
