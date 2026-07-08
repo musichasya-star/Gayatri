@@ -56,6 +56,7 @@ class AiService
             $bookingContext = $ignorePriorBookingContext
                 ? []
                 : ($this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message));
+            $bookingContext = $this->refreshBookingContext($bookingContext);
             $promoIntent = Str::contains($text, ['promo', 'diskon', 'voucher', 'voucer']);
             $conversationalIntent = $this->isConversationalMessage($message);
             $bookingLookupIntent = ($extraction['intent'] ?? null) === 'booking_lookup_request';
@@ -128,7 +129,7 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->operationalHoursReply($knowledgeText), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if (! empty($bookingContext['availability_slot_id']) && empty($bookingContext['missing_fields'])) {
+            if (((! empty($bookingContext['availability_slot_id'])) || ($bookingContext['action'] ?? null) === 'cancel_booking') && empty($bookingContext['missing_fields'])) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingConfirmationReply($bookingContext), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -540,6 +541,42 @@ class AiService
         return array_filter(($result['booking'] ?? []) + ['missing_fields' => $result['missing_fields'] ?? []], fn ($value) => $value !== null && $value !== [] && $value !== '');
     }
 
+    private function refreshBookingContext(array $bookingContext): array
+    {
+        if ($bookingContext === []) {
+            return [];
+        }
+
+        $booking = null;
+        if (! empty($bookingContext['booking_id'])) {
+            $booking = Booking::query()->with('service')->find($bookingContext['booking_id']);
+        }
+
+        if (! $booking && ! empty($bookingContext['booking_code'])) {
+            $booking = Booking::query()
+                ->with('service')
+                ->where('booking_code', $bookingContext['booking_code'])
+                ->first();
+        }
+
+        if (! $booking) {
+            return $bookingContext;
+        }
+
+        return array_filter(array_replace($bookingContext, [
+            'booking_id' => $booking->id,
+            'booking_code' => $booking->booking_code,
+            'booking_status' => $booking->status,
+            'service_id' => $booking->service_id,
+            'service_name' => $booking->service?->name,
+            'booking_date' => $booking->booking_date?->toDateString(),
+            'start_time' => substr((string) $booking->start_time, 0, 8),
+            'availability_slot_id' => $booking->availability_slot_id,
+            'branch_id' => $booking->branch_id,
+            'therapist_id' => $booking->therapist_id,
+        ]), fn ($value) => $value !== null && $value !== [] && $value !== '');
+    }
+
     private function humanMissingFields(array $missingFields): string
     {
         $labels = collect($missingFields)->map(fn (string $field) => match ($field) {
@@ -578,6 +615,10 @@ class AiService
         $isCancel = ($bookingContext['action'] ?? null) === 'cancel_booking';
 
         if ($isCancel) {
+            if (in_array($bookingContext['booking_status'] ?? null, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER], true)) {
+                return 'Booking '.($bookingContext['booking_code'] ?? '-').' sudah berstatus cancelled, Bunda. Jadi tidak perlu konfirmasi pembatalan ulang.';
+            }
+
             return 'Baik Bunda, saya temukan reservasi yang akan dibatalkan. Mohon cek dulu detailnya ya:'
                 ."\nKode booking: ".($bookingContext['booking_code'] ?? '-')
                 ."\nLayanan: ".($bookingContext['service_name'] ?? '-')

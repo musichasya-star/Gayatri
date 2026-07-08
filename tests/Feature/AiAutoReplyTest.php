@@ -544,6 +544,79 @@ class AiAutoReplyTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_cancelled_booking_context_does_not_ask_for_cancel_confirmation_again(): void
+    {
+        $this->seedAiSetup();
+        $service = Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Bunda Cancelled Booking', 'whatsapp_number' => '628123450041', 'status' => CustomerStatus::LEAD]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450041@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::AI_HANDLED,
+            'ai_enabled' => true,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'service_id' => $service->id,
+            'booking_code' => 'BK-GAY-260708-FKHJ',
+            'booking_date' => now()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'status' => BookingStatus::CANCELLED,
+            'payment_status' => 'unpaid',
+            'source' => 'manual',
+        ]);
+        $oldMessage = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'batalkan booking saya',
+            'sent_at' => now()->subMinute(),
+        ]);
+        AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'message_id' => $oldMessage->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_cancel_request',
+            'confidence_score' => 0.95,
+            'extracted_customer_data' => [],
+            'extracted_booking_data' => [
+                'action' => 'cancel_booking',
+                'booking_id' => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'booking_status' => BookingStatus::CONFIRMED,
+                'service_id' => $service->id,
+                'service_name' => $service->name,
+                'booking_date' => $booking->booking_date?->toDateString(),
+                'start_time' => $booking->start_time,
+            ],
+            'missing_fields' => [],
+            'raw_ai_response' => [],
+            'status' => 'awaiting_confirmation',
+        ]);
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'batalkan booking saya',
+            'sent_at' => now(),
+        ]);
+
+        $result = app(AiService::class)->generateReply($conversation, $message);
+
+        $this->assertStringContainsString('sudah berstatus cancelled', strtolower($result['reply']));
+        $this->assertStringNotContainsString('reservasi yang akan dibatalkan', strtolower($result['reply']));
+        $this->assertStringNotContainsString('Iya batalkan', $result['reply']);
+    }
+
     public function test_member_card_question_uses_member_card_knowledge_first(): void
     {
         $this->seedAiSetup();

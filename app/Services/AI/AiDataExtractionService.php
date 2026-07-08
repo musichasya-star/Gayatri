@@ -451,6 +451,7 @@ class AiDataExtractionService
             && (! $this->isNewBookingChoice($normalized) || $latestContext?->intent === 'booking_clarification_required')
             && (
                 $booking !== []
+                || ($result['intent'] ?? null) === 'booking_cancel_request'
                 || $this->isAffirmation($normalized)
                 || $this->isRejection($normalized)
                 || $this->isNewBookingChoice($normalized)
