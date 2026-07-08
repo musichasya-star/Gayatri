@@ -117,7 +117,7 @@ class AiDataExtractionService
             return 'medical';
         }
 
-        if (Str::contains($text, ['batalkan booking', 'batal booking', 'batalkan reservasi', 'batal reservasi', 'cancel booking', 'cancel reservasi', 'mau batal', 'ingin batal', 'pembatalan'])) {
+        if (Str::contains($text, ['batalkan booking', 'batal booking', 'batalkan reservasi', 'batal reservasi', 'cancel booking', 'cancel reservasi', 'mau batal', 'ingin batal', 'pembatalan', 'dibatalkan', 'batalkan'])) {
             return 'booking_cancel_request';
         }
 

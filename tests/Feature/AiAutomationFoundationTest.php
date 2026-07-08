@@ -815,6 +815,61 @@ class AiAutomationFoundationTest extends TestCase
         ]);
     }
 
+    public function test_chat_cancel_pending_booking_with_iya_dibatalkan_does_not_create_booking_draft_approval(): void
+    {
+        [$customer, $conversation] = $this->seedConversation('628123450024', 'Bunda Cancel Pending');
+        $service = Service::create([
+            'name' => 'Pijat Bayi Balita',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 200000,
+            'is_active' => true,
+        ]);
+        $slot = AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'capacity' => 1,
+            'booked_count' => 1,
+            'status' => AvailabilitySlotStatus::FULL,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'service_id' => $service->id,
+            'availability_slot_id' => $slot->id,
+            'booking_code' => 'BK-GAY-TEST-CNCL-P',
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'status' => BookingStatus::PENDING,
+            'payment_status' => 'unpaid',
+            'source' => 'ai_approval',
+        ]);
+
+        $extracted = app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'saya mau batal saja'));
+        app(AiAutomationExecutorService::class)->process($extracted);
+
+        $this->assertSame('booking_cancel_request', $extracted->intent);
+        $this->assertSame($booking->id, data_get($extracted->extracted_booking_data, 'booking_id'));
+        $this->assertSame('awaiting_confirmation', $extracted->fresh()->status);
+
+        $this->outgoingAiMessage($conversation, $customer, "Baik Bunda, saya temukan reservasi yang akan dibatalkan.\nKode booking: BK-GAY-TEST-CNCL-P\nLayanan: Pijat Bayi Balita\nTanggal: ".now()->addDay()->toDateString()."\nJam: 15:00\nStatus saat ini: pending\n\nKalau sudah sesuai, Bunda bisa balas Iya batalkan.");
+        $confirmed = app(AiDataExtractionService::class)->extractFromMessage($this->incomingMessage($conversation, $customer, 'iya dibatalkan'));
+        app(AiAutomationExecutorService::class)->process($confirmed);
+
+        $this->assertSame('booking_cancel_request', $confirmed->intent);
+        $this->assertSame('cancel_booking', data_get($confirmed->extracted_booking_data, 'action'));
+        $this->assertSame(BookingStatus::CANCELLED_BY_USER, $booking->fresh()->status);
+        $this->assertSame(0, $slot->fresh()->booked_count);
+        $this->assertSame(AvailabilitySlotStatus::AVAILABLE, $slot->fresh()->status);
+        $this->assertDatabaseMissing('ai_automation_approvals', [
+            'ai_extracted_data_id' => $confirmed->id,
+            'action' => 'create_booking_draft',
+        ]);
+    }
+
     public function test_chat_cancel_confirmed_booking_requires_admin_approval(): void
     {
         [$customer, $conversation] = $this->seedConversation('628123450020', 'Bunda Cancel Confirmed');

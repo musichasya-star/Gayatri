@@ -543,8 +543,8 @@ class AiService
 
     private function refreshBookingContext(array $bookingContext): array
     {
-        if ($bookingContext === []) {
-            return [];
+        if ($bookingContext === [] || ($bookingContext['action'] ?? null) !== 'cancel_booking') {
+            return $bookingContext;
         }
 
         $booking = null;
@@ -772,6 +772,10 @@ class AiService
     {
         $text = Str::of($message)->lower()->squish()->toString();
 
+        if (Str::contains($text, ['jam ', 'pukul', 'tanggal', 'besok', 'lusa', 'booking', 'reservasi', 'jadwal', 'ganti', 'ubah', 'nama ', 'alamat '])) {
+            return false;
+        }
+
         return $this->isGreeting($message)
             || $this->isThanks($message)
             || Str::contains($text, ['kamu namanya siapa', 'nama kamu siapa', 'siapa kamu', 'kamu siapa']);
@@ -787,6 +791,10 @@ class AiService
     private function isGreeting(string $message): bool
     {
         $text = Str::of($message)->lower()->squish()->toString();
+
+        if (Str::contains($text, ['jam ', 'pukul', 'tanggal', 'besok', 'lusa', 'booking', 'reservasi', 'jadwal', 'ganti', 'ubah', 'nama ', 'alamat '])) {
+            return false;
+        }
 
         return Str::contains($text, [
             'halo', 'hallo', 'hai', 'hi', 'pagi', 'siang', 'sore', 'malam', 'selamat pagi', 'selamat siang', 'selamat sore', 'selamat malam', 'assalamualaikum', 'assalamu alaikum',
