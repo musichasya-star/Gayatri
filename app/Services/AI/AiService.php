@@ -143,13 +143,14 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingMissingFieldsReply($bookingContext['missing_fields']), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            $providerKnowledgeText = $knowledge->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
-            $localKnowledgeText = $knowledge->take(1)->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
+            $answerKnowledge = $this->answerKnowledge($knowledge);
+            $providerKnowledgeText = $answerKnowledge->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
+            $localKnowledgeText = $answerKnowledge->take(1)->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
             $providerReply = $this->buildProviderReply($message, $persona, $providerKnowledgeText);
             $reply = $providerReply ?: $this->buildLocalReply($message, $persona, $localKnowledgeText);
             $context['reply_source'] = $providerReply ? 'provider' : 'local';
 
-            return $this->logAndReturn($message, $persona, $knowledge->first(), $reply, 0.85, 'success', null, $knowledge->pluck('slug')->all(), $context);
+            return $this->logAndReturn($message, $persona, $answerKnowledge->first(), $reply, 0.85, 'success', null, $answerKnowledge->pluck('slug')->all(), $context);
         } catch (Throwable) {
             return $this->logAndReturn($message, $persona, null, 'Mohon maaf Bunda, sistem  sedang mengalami kendala. Saya teruskan ke admin agar dibantu manual ya.', 0.0, 'escalated', 'provider_error', [], $context);
         }
@@ -264,6 +265,22 @@ class AiService
         }
 
         return $response ? $this->extractProviderReply($provider, $response) : null;
+    }
+
+    private function answerKnowledge($knowledge)
+    {
+        if ($knowledge->isEmpty()) {
+            return $knowledge;
+        }
+
+        $topScore = (float) $knowledge->max('relevance_score');
+        if ($topScore <= 0) {
+            return $knowledge->take(1);
+        }
+
+        return $knowledge
+            ->filter(fn ($item) => (float) $item->relevance_score > ($topScore / 2))
+            ->values();
     }
 
     private function promoReply(): string

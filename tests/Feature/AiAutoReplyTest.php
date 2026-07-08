@@ -408,6 +408,77 @@ class AiAutoReplyTest extends TestCase
         $this->assertSame('provider', data_get(Conversation::where('wa_chat_id', '628123450007@c.us')->firstOrFail()->aiLogs()->latest('id')->first()->meta, 'reply_source'));
     }
 
+    public function test_external_provider_receives_only_high_relevance_knowledge(): void
+    {
+        $this->seedAiSetup();
+        app(AppSettingService::class)->setMany([
+            'ai.provider' => 'openrouter',
+            'ai.model' => 'openai/gpt-4o-mini',
+            'ai.temperature' => 0.3,
+            'ai.max_tokens' => 800,
+        ]);
+        app(AppSettingService::class)->set('ai.api_key', 'sk-openrouter-test');
+
+        KnowledgeBase::create([
+            'title' => 'pemilik Gayatri',
+            'slug' => 'pemilik-gayatri',
+            'type' => 'text',
+            'content' => 'pemilik Gayatri Mom & baby Spa adalah dr. Amira Tauhida. dia adalah dokter umum dan konselor menyusui di Kota Kediri.',
+            'status' => 'active',
+        ])->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'pemilik Gayatri Mom & baby Spa adalah dr. Amira Tauhida.',
+            'token_count' => 8,
+        ]);
+        KnowledgeBase::create([
+            'title' => 'Benefit Member Card',
+            'slug' => 'benefit-member-card',
+            'type' => 'text',
+            'content' => 'Kartu bisa ditukar dengan diskon di merchant Gayatri Mom & Baby SPA. Pemilik kartu berhak mendapatkan 1 poin.',
+            'status' => 'active',
+        ])->chunks()->create([
+            'chunk_index' => 0,
+            'content' => 'Pemilik kartu berhak mendapatkan 1 poin.',
+            'token_count' => 6,
+        ]);
+
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => ['content' => 'Pemilik Gayatri adalah dr. Amira Tauhida, Bunda.'],
+                ]],
+            ], 200),
+            'http://waha.test/api/sendText' => Http::response(['id' => 'wamid-provider-owner-out-001'], 200),
+        ]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-provider-owner-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450036@c.us',
+                    'fromMe' => false,
+                    'body' => 'siapa pemilik gayatri',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        Http::assertSent(function ($request) {
+            if ($request->url() !== 'https://openrouter.ai/api/v1/chat/completions') {
+                return false;
+            }
+
+            $systemPrompt = data_get($request->data(), 'messages.0.content', '');
+
+            return str_contains($systemPrompt, 'pemilik Gayatri')
+                && str_contains($systemPrompt, 'dr. Amira Tauhida')
+                && ! str_contains($systemPrompt, 'Benefit Member Card');
+        });
+    }
+
     public function test_ai_does_not_reply_when_conversation_is_taken_over_by_human(): void
     {
         $this->seedAiSetup();
