@@ -245,6 +245,41 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('teruskan ke admin', strtolower($reply));
     }
 
+    public function test_available_services_question_uses_numbered_list_without_schedule(): void
+    {
+        $this->seedAiSetup();
+        Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        Service::create(['name' => 'Mom Postnatal Massage', 'category' => 'mom-care', 'duration_minutes' => 60, 'price' => 300000, 'is_active' => true]);
+        Service::create(['name' => 'Pijat Bayi Balita', 'category' => 'Pijat Bayi', 'duration_minutes' => 60, 'price' => 150000, 'is_active' => true]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-services-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-services-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450037@c.us',
+                    'fromMe' => false,
+                    'body' => 'layanan apa yang tersedia',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450037@c.us')->firstOrFail();
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
+
+        $this->assertStringContainsString("1. Baby Spa Premium", $reply);
+        $this->assertStringContainsString("2. Mom Postnatal Massage", $reply);
+        $this->assertStringContainsString("3. Pijat Bayi Balita", $reply);
+        $this->assertStringContainsString('reservasi', strtolower($reply));
+        $this->assertStringNotContainsString('Slot yang tersedia', $reply);
+        $this->assertStringNotContainsString('09:00', $reply);
+    }
+
     public function test_member_card_question_uses_member_card_knowledge_first(): void
     {
         $this->seedAiSetup();

@@ -121,13 +121,13 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingConfirmationReply($bookingContext), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if ($scheduleIntent && ! Str::contains($text, ['booking', 'reservasi', 'pesan jadwal', 'mau daftar', 'ubah jadwal', 'ganti jadwal', 'reschedule', 'pindah jam', 'pindah tanggal', 'ganti menjadi', 'ubah menjadi', 'menjadi jam', 'jadi jam'])) {
+            if ($serviceInquiryIntent && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->buildLocalReply($message, $persona, ''), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if ($serviceInquiryIntent && ! $bookingIntent && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())) {
+            if ($scheduleIntent && ! Str::contains($text, ['booking', 'reservasi', 'pesan jadwal', 'mau daftar', 'ubah jadwal', 'ganti jadwal', 'reschedule', 'pindah jam', 'pindah tanggal', 'ganti menjadi', 'ubah menjadi', 'menjadi jam', 'jadi jam', 'layanan', 'treatment', 'jasa', 'paket'])) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->buildLocalReply($message, $persona, ''), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -190,6 +190,10 @@ class AiService
             return 'Baik Bunda, saya bantu proses booking secara bertahap ya. Boleh tuliskan nama reservasi dulu?';
         }
 
+        if (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
+            return $this->servicesReply();
+        }
+
         if (Str::contains($text, ['ready', 'tersedia', 'kosong', 'ada jadwal', 'hari apa', 'kapan bisa'])) {
             $slots = $this->availableSlotSummaries();
 
@@ -201,16 +205,6 @@ class AiService
                 'Untuk saat ini belum ada slot tersedia yang tercatat di sistem. Jam operasional Gayatri 09.00-18.00; Bunda ingin cek untuk hari apa?',
                 'Belum ada slot ready yang terinput, Bunda. Kami operasional 09.00-18.00; boleh sebutkan rencana harinya?',
                 'Data slot belum tersedia di sistem. Jam operasional 09.00-18.00; Bunda ingin weekday atau weekend?',
-            ]);
-        }
-
-        if (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
-            $services = $this->activeServicesText();
-
-            return $this->variant($message, [
-                'Untuk layanan, yang tersedia saat ini: '.$services.'. Kalau Bunda mencari pijat, pilihan yang paling dekat biasanya Mom Massage atau Baby Spa sesuai kebutuhan. Bunda ingin untuk bayi atau untuk Bunda?',
-                'Bisa Bunda. Saat ini layanan yang tersedia: '.$services.'. Bunda ingin saya bantu arahkan layanan yang cocok atau sekalian cek jadwal?',
-                'Kami bisa bantu info layanan ya Bunda. Pilihan aktif saat ini: '.$services.'. Untuk pijat, Bunda bisa pilih layanan massage yang tersedia atau ceritakan kebutuhannya dulu.',
             ]);
         }
 
@@ -633,6 +627,25 @@ class AiService
             ->limit($limit)
             ->pluck('name')
             ->implode(', ') ?: 'Baby Spa Premium';
+    }
+
+    private function servicesReply(): string
+    {
+        $services = Service::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name')
+            ->values();
+
+        if ($services->isEmpty()) {
+            return 'Bisa Bunda. Saat ini data layanan belum tersedia di sistem, tapi tim Gayatri siap bantu cek kebutuhan Bunda. Apakah Bunda ingin kami bantu buat reservasi?';
+        }
+
+        $list = $services
+            ->map(fn (string $name, int $index) => ($index + 1).'. '.$name)
+            ->implode("\n");
+
+        return "Bisa Bunda. Layanan yang tersedia saat ini:\n".$list."\n\nBunda ingin reservasi layanan yang mana?";
     }
 
     private function variant(string $message, array $options): string
