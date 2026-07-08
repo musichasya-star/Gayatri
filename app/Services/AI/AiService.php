@@ -49,10 +49,11 @@ class AiService
             $text = $this->normalizeServiceTerms($message);
             $knowledgeQuestion = $this->isKnowledgeQuestion($text);
             $serviceListQuestion = $this->isServiceListQuestion($text);
-            $extraction = $knowledgeQuestion
+            $ignorePriorBookingContext = $this->shouldIgnorePriorBookingContext($text);
+            $extraction = $ignorePriorBookingContext
                 ? app(AiDataExtractionService::class)->extract($message)
                 : $this->extractionForContext($message, $context);
-            $bookingContext = $knowledgeQuestion
+            $bookingContext = $ignorePriorBookingContext
                 ? []
                 : ($this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message));
             $promoIntent = Str::contains($text, ['promo', 'diskon', 'voucher', 'voucer']);
@@ -70,6 +71,12 @@ class AiService
 
             if (! $guardrail['allowed']) {
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $guardrail['reply'], $guardrail['confidence'], 'escalated', $guardrail['reason'], $knowledge->pluck('slug')->all(), $context);
+            }
+
+            if ($this->isCurrentTimeQuestion($text)) {
+                $context['reply_source'] = 'local';
+
+                return $this->logAndReturn($message, $persona, $knowledge->first(), $this->currentTimeReply(), 0.92, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
             if ($this->isThanks($message) && ! $this->isAffirmation($message) && ! $this->isRejection($message)) {
@@ -275,6 +282,45 @@ class AiService
     private function isServiceListQuestion(string $text): bool
     {
         return Str::contains($text, ['layanan apa', 'layanan yang tersedia', 'layanan tersedia', 'apa saja layanan', 'daftar layanan', 'pilihan layanan']);
+    }
+
+    private function shouldIgnorePriorBookingContext(string $text): bool
+    {
+        if ($this->isAffirmation($text) || $this->isRejection($text)) {
+            return false;
+        }
+
+        if (Str::contains($text, ['booking', 'reservasi', 'pesan jadwal', 'mau daftar', 'ubah jadwal', 'ganti jadwal', 'reschedule', 'pindah jam', 'pindah tanggal', 'batalkan', 'batal booking', 'batal reservasi', 'cancel booking'])) {
+            return false;
+        }
+
+        return $this->isKnowledgeQuestion($text)
+            || $this->isCurrentTimeQuestion($text)
+            || $this->isConversationalMessage($text)
+            || $this->isOperationalInquiry($text);
+    }
+
+    private function isCurrentTimeQuestion(string $text): bool
+    {
+        if ($this->isOperationalInquiry($text)) {
+            return false;
+        }
+
+        return Str::contains($text, ['jam berapa', 'pukul berapa', 'sekarang jam', 'waktu sekarang', 'sekarang pagi', 'sekarang siang', 'sekarang sore', 'sekarang malam', 'pagi atau malam', 'siang atau malam', 'sore atau malam']);
+    }
+
+    private function currentTimeReply(): string
+    {
+        $now = Carbon::now(config('app.timezone', 'Asia/Jakarta'));
+        $hour = (int) $now->format('H');
+        $period = match (true) {
+            $hour >= 4 && $hour < 10 => 'pagi',
+            $hour >= 10 && $hour < 15 => 'siang',
+            $hour >= 15 && $hour < 18 => 'sore',
+            default => 'malam',
+        };
+
+        return 'Saat ini pukul '.$now->format('H:i').' WIB, jadi sekarang '.$period.' ya, Bunda.';
     }
 
     private function answerKnowledge($knowledge)
