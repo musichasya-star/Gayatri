@@ -46,7 +46,7 @@ class AiService
     {
         try {
             $knowledge = $this->knowledgeRetrieval->retrieve($message);
-            $text = Str::lower($message);
+            $text = $this->normalizeServiceTerms($message);
             $extraction = $this->extractionForContext($message, $context);
             $bookingContext = $this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message);
             $promoIntent = Str::contains($text, ['promo', 'diskon', 'voucher', 'voucer']);
@@ -156,7 +156,7 @@ class AiService
 
     private function buildLocalReply(string $message, ?AiPersona $persona, string $knowledgeText): string
     {
-        $text = Str::of($message)->lower()->squish()->toString();
+        $text = $this->normalizeServiceTerms($message);
 
         if ($this->isGreeting($message)) {
             return $this->greetingReply($message).' Bunda, terima kasih sudah menghubungi Gayatri. Ada yang bisa kami bantu hari ini? Bunda bisa tanya jadwal, layanan baby spa, booking, atau promo yang sedang aktif.';
@@ -655,6 +655,11 @@ class AiService
     private function thanksReply(): string
     {
         return 'Sama-sama Bunda. Jika ada yang ingin ditanyakan lagi seputar layanan Gayatri, jadwal, atau booking, kami siap bantu ya.';
+    }
+
+    private function normalizeServiceTerms(string $text): string
+    {
+        return Str::of(str_replace(['pijet', 'pijit'], 'pijat', Str::lower($text)))->squish()->toString();
     }
 
     private function isAffirmation(string $message): bool

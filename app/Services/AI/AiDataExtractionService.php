@@ -52,7 +52,7 @@ class AiDataExtractionService
 
     public function extract(string $text): array
     {
-        $normalized = Str::lower($text);
+        $normalized = $this->normalizeServiceTerms($text);
         $intent = $this->detectIntent($normalized);
         $service = $this->isBenchmarkBaseline() ? $this->detectServiceFromDb($normalized) : $this->detectServiceFromCache($normalized);
         $bookingDate = $this->detectBookingDate($normalized);
@@ -155,6 +155,11 @@ class AiDataExtractionService
     private function detectService(string $text): ?Service
     {
         return $this->detectServiceFromCache($text);
+    }
+
+    private function normalizeServiceTerms(string $text): string
+    {
+        return Str::of(str_replace(['pijet', 'pijit'], 'pijat', Str::lower($text)))->squish()->toString();
     }
 
     private function detectServiceFromDb(string $text): ?Service

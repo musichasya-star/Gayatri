@@ -213,6 +213,38 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('teruskan ke admin', strtolower($reply));
     }
 
+    public function test_pijet_typo_offers_available_services_instead_of_admin_fallback(): void
+    {
+        $this->seedAiSetup();
+        Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        Service::create(['name' => 'Pijat Bayi Balita', 'category' => 'Pijat Bayi', 'duration_minutes' => 60, 'price' => 150000, 'is_active' => true]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-pijet-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-pijet-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450034@c.us',
+                    'fromMe' => false,
+                    'body' => 'saya mau pijet',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450034@c.us')->firstOrFail();
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
+
+        $this->assertSame(ConversationStatus::AI_HANDLED, $conversation->fresh()->status);
+        $this->assertStringContainsString('layanan', strtolower($reply));
+        $this->assertStringContainsString('Pijat Bayi Balita', $reply);
+        $this->assertStringNotContainsString('teruskan ke admin', strtolower($reply));
+    }
+
     public function test_pesan_baby_spa_starts_step_booking_flow_without_old_template(): void
     {
         $this->seedAiSetup();

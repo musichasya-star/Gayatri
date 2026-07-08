@@ -618,7 +618,7 @@ class ConversationFlowService
             return $this->inform($flow, $message, 'Saya asisten WhatsApp Gayatri Mom & Baby Spa yang membantu info layanan dan reservasi, Bunda. '.$this->currentStepPrompt($flow));
         }
 
-        if (Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
+        if (Str::contains($this->normalizeServiceTerms($text), ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
             return $this->inform($flow, $message, 'Layanan yang tersedia saat ini: '.$this->activeServicesText().'. '.$this->currentStepPrompt($flow));
         }
 
@@ -671,7 +671,7 @@ class ConversationFlowService
 
     private function serviceFromText(string $text): ?Service
     {
-        $normalizedText = Str::lower($text);
+        $normalizedText = $this->normalizeServiceTerms($text);
 
         return collect($this->activeServices())->first(function (Service $service) use ($normalizedText) {
             $categoryText = (string) $service->category;
@@ -735,6 +735,11 @@ class ConversationFlowService
         }
 
         return $this->textExtractionCache[$key];
+    }
+
+    private function normalizeServiceTerms(string $text): string
+    {
+        return Str::of(str_replace(['pijet', 'pijit'], 'pijat', Str::lower($text)))->squish()->toString();
     }
 
     private function activeServicesText(): string
