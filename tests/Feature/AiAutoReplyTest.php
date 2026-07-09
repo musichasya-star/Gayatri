@@ -282,6 +282,71 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('09:00', $reply);
     }
 
+    public function test_service_price_question_uses_dashboard_service_prices(): void
+    {
+        $this->seedAiSetup();
+        Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        Service::create(['name' => 'Mom Postnatal Massage', 'category' => 'mom-care', 'duration_minutes' => 75, 'price' => 300000, 'is_active' => true]);
+        Service::create(['name' => 'Pijat Bayi Balita', 'category' => 'Pijat Bayi', 'duration_minutes' => 45, 'price' => 150000, 'is_active' => true]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-prices-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-prices-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450042@c.us',
+                    'fromMe' => false,
+                    'body' => 'berapa harga layanan di gayatri?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450042@c.us')->firstOrFail();
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
+
+        $this->assertStringContainsString('1. Baby Spa Premium (60 menit) - Rp250.000', $reply);
+        $this->assertStringContainsString('2. Mom Postnatal Massage (75 menit) - Rp300.000', $reply);
+        $this->assertStringContainsString('3. Pijat Bayi Balita (45 menit) - Rp150.000', $reply);
+        $this->assertStringContainsString('reservasi', strtolower($reply));
+        $this->assertStringNotContainsString('teruskan ke admin', strtolower($reply));
+    }
+
+    public function test_specific_service_price_question_filters_matching_service(): void
+    {
+        $this->seedAiSetup();
+        Service::create(['name' => 'Baby Spa Premium', 'category' => 'baby-spa', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        Service::create(['name' => 'Mom Postnatal Massage', 'category' => 'mom-care', 'duration_minutes' => 75, 'price' => 300000, 'is_active' => true]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-baby-price-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-baby-price-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450043@c.us',
+                    'fromMe' => false,
+                    'body' => 'harga baby spa premium berapa?',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $conversation = Conversation::where('wa_chat_id', '628123450043@c.us')->firstOrFail();
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
+
+        $this->assertStringContainsString('Baby Spa Premium (60 menit) - Rp250.000', $reply);
+        $this->assertStringNotContainsString('Mom Postnatal Massage', $reply);
+        $this->assertStringNotContainsString('Slot yang tersedia', $reply);
+    }
+
     public function test_service_detail_question_does_not_reuse_previous_cancel_context(): void
     {
         $this->seedAiSetup();
