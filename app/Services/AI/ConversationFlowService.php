@@ -319,11 +319,31 @@ class ConversationFlowService
         $slot = $this->slotForServiceDateTime($service, $date, $time);
 
         if (! $slot && $this->hasManagedSlotsForServiceDate($service->id, $date)) {
-            return $this->inform($flow, $message, 'Jam '.substr((string) $time, 0, 5).' belum tersedia, Bunda. Jam yang masih ready: '.$this->alternativeSlotsText($service, $date).'. Bunda pilih jam yang mana?');
+            $alternatives = $this->alternativeSlotsText($service, $date);
+
+            if ($alternatives === 'belum ada slot tersedia') {
+                return $this->noAvailableSlotsForDate($flow, $message, $service, $date);
+            }
+
+            return $this->inform($flow, $message, 'Jam '.substr((string) $time, 0, 5).' belum tersedia, Bunda. Jam yang masih ready: '.$alternatives.'. Bunda pilih jam yang mana?');
+        }
+
+        if (! $slot) {
+            return $this->noAvailableSlotsForDate($flow, $message, $service, $date);
         }
 
         if ($slot && ($slot->status !== AvailabilitySlotStatus::AVAILABLE || $slot->booked_count >= $slot->capacity)) {
-            return $this->inform($flow, $message, 'Slot jam '.substr((string) $time, 0, 5).' sudah penuh, Bunda. Yang masih tersedia: '.$this->alternativeSlotsText($service, $date).'. Bunda pilih jam yang mana?');
+            $alternatives = $this->alternativeSlotsText($service, $date);
+
+            if ($alternatives === 'belum ada slot tersedia') {
+                return $this->noAvailableSlotsForDate($flow, $message, $service, $date);
+            }
+
+            return $this->inform($flow, $message, 'Slot jam '.substr((string) $time, 0, 5).' sudah penuh, Bunda. Yang masih tersedia: '.$alternatives.'. Bunda pilih jam yang mana?');
+        }
+
+        if (! $this->slotMatchesServiceDuration($service, $slot)) {
+            return $this->inform($flow, $message, 'Slot jam '.substr((string) $time, 0, 5).' belum sesuai durasi layanan, Bunda. Jam yang masih ready: '.$this->alternativeSlotsText($service, $date).'. Bunda pilih jam yang mana?');
         }
 
         if ($slot) {
@@ -372,6 +392,33 @@ class ConversationFlowService
         return $this->slotCache[$key];
     }
 
+    private function noAvailableSlotsForDate(ConversationFlow $flow, Message $message, Service $service, string $date): array
+    {
+        $payload = $flow->payload ?? [];
+        unset($payload['booking_date'], $payload['start_time'], $payload['availability_slot_id'], $payload['branch_id'], $payload['therapist_id']);
+
+        $flow->update([
+            'payload' => $payload,
+            'step' => 'ask_date',
+            'last_message_id' => $message->id,
+            'attempts' => $flow->attempts ?? [],
+        ]);
+
+        return $this->reply('Jadwal '.$service->name.' tanggal '.$date.' masih kosong, Bunda. Silakan pilih tanggal lain, atau Bunda bisa tanya "jadwal yang tersedia".');
+    }
+
+    private function slotMatchesServiceDuration(Service $service, AvailabilitySlot $slot): bool
+    {
+        $start = strtotime(substr((string) $slot->start_time, 0, 5));
+        $end = strtotime(substr((string) $slot->end_time, 0, 5));
+
+        if ($start === false || $end === false) {
+            return false;
+        }
+
+        return ($end - $start) === ((int) $service->duration_minutes * 60);
+    }
+
     private function hasManagedSlotsForServiceDate(int $serviceId, string $date): bool
     {
         $key = $serviceId.'|'.$date;
@@ -415,6 +462,10 @@ class ConversationFlowService
             }
 
             return $this->invalid($flow, $message, 'Untuk memproses reservasi, Bunda bisa balas "lanjutkan". Kalau tidak jadi, balas "batal" ya.');
+        }
+
+        if ($slotReply = $this->guardSlotBeforeConfirmation($flow, $message)) {
+            return $slotReply;
         }
 
         $payload = $flow->payload ?? [];
@@ -465,7 +516,16 @@ class ConversationFlowService
             'raw_ai_response' => $raw,
             'status' => 'extracted',
         ]);
-        $this->executorService->process($extracted);
+        $automationLog = $this->executorService->process($extracted);
+
+        if (! $automationLog || in_array($automationLog->status, ['failed', 'skipped', 'blocked'], true)) {
+            $flow->update([
+                'last_message_id' => $message->id,
+                'attempts' => $flow->attempts ?? [],
+            ]);
+
+            return $this->reply('Maaf Bunda, reservasi belum berhasil diproses dari sistem. Saya bantu teruskan ke admin Gayatri agar dicek manual ya.');
+        }
 
         $flow->update([
             'status' => 'completed',
@@ -480,6 +540,32 @@ class ConversationFlowService
             : 'Siap Bunda, reservasi sudah kami proses. Mohon tunggu konfirmasi dari tim Gayatri ya.';
 
         return $this->reply($reply);
+    }
+
+    private function guardSlotBeforeConfirmation(ConversationFlow $flow, Message $message): ?array
+    {
+        $payload = $flow->payload ?? [];
+        $service = ! empty($payload['service_id']) ? Service::find($payload['service_id']) : null;
+        $date = $payload['booking_date'] ?? null;
+        $time = $payload['start_time'] ?? null;
+
+        if (! $service || ! $date || ! $time) {
+            return $this->invalid($flow, $message, 'Data jadwal belum lengkap, Bunda. Boleh pilih tanggal dan jam reservasinya lagi?');
+        }
+
+        $slot = $this->slotForServiceDateTime($service, $date, $time);
+
+        if (
+            ! $slot
+            || (! empty($payload['availability_slot_id']) && (int) $payload['availability_slot_id'] !== (int) $slot->id)
+            || $slot->status !== AvailabilitySlotStatus::AVAILABLE
+            || $slot->booked_count >= $slot->capacity
+            || ! $this->slotMatchesServiceDuration($service, $slot)
+        ) {
+            return $this->validateSlotAndMaybeConfirm($flow, $message, ['start_time' => $time]);
+        }
+
+        return null;
     }
 
     private function advance(ConversationFlow $flow, Message $message, array $updates, string $nextStep, string $reply): array
@@ -793,6 +879,7 @@ class ConversationFlowService
     {
         return $this->availableSlotsForDate((int) $service->id, $date)
             ->filter(fn (AvailabilitySlot $slot) => $slot->status === AvailabilitySlotStatus::AVAILABLE && $slot->booked_count < $slot->capacity)
+            ->filter(fn (AvailabilitySlot $slot) => $this->slotMatchesServiceDuration($service, $slot))
             ->sortBy('start_time')
             ->take(3)
             ->map(fn (AvailabilitySlot $slot) => substr((string) $slot->start_time, 0, 5))
@@ -834,6 +921,11 @@ class ConversationFlowService
             ->filter(fn (AvailabilitySlot $slot) => $slot->status === AvailabilitySlotStatus::AVAILABLE && $slot->booked_count < $slot->capacity)
             ->sortBy('start_time');
 
+        $service = Service::find($serviceId);
+        if ($service) {
+            $slots = $slots->filter(fn (AvailabilitySlot $slot) => $this->slotMatchesServiceDuration($service, $slot));
+        }
+
         if ($date === now()->toDateString()) {
             $slots = $slots->filter(fn (AvailabilitySlot $slot) => $slot->start_time >= now()->format('H:i:s'));
         }
@@ -853,7 +945,7 @@ class ConversationFlowService
                 ->where('service_id', $serviceId)
                 ->whereDate('slot_date', $date)
                 ->orderBy('start_time')
-                ->get(['id', 'slot_date', 'start_time', 'status', 'booked_count', 'capacity', 'branch_id', 'therapist_id'])
+                ->get(['id', 'slot_date', 'start_time', 'end_time', 'status', 'booked_count', 'capacity', 'branch_id', 'therapist_id'])
                 ->all();
         }
 
@@ -862,7 +954,7 @@ class ConversationFlowService
                 ->where('service_id', $serviceId)
                 ->whereDate('slot_date', $date)
                 ->orderBy('start_time')
-                ->get(['id', 'slot_date', 'start_time', 'status', 'booked_count', 'capacity', 'branch_id', 'therapist_id'])
+                ->get(['id', 'slot_date', 'start_time', 'end_time', 'status', 'booked_count', 'capacity', 'branch_id', 'therapist_id'])
                 ->all();
         }
 

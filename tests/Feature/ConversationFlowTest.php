@@ -294,6 +294,36 @@ class ConversationFlowTest extends TestCase
         }
     }
 
+    public function test_booking_flow_rejects_time_when_selected_date_has_no_available_slots(): void
+    {
+        Carbon::setTestNow('2026-07-09 10:00:00');
+
+        try {
+            [$customer, $conversation] = $this->conversation('628177700056');
+            $this->service();
+            $flow = app(ConversationFlowService::class);
+
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya mau booking'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'Arif'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, '082226262828'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'kediri raya'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'baby spa'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'hari ini'));
+            $reply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'jam 2 siang'));
+
+            $activeFlow = ConversationFlow::latest('id')->first();
+
+            $this->assertStringContainsString('jadwal baby spa premium tanggal 2026-07-09 masih kosong', strtolower($reply['reply']));
+            $this->assertSame('ask_date', $activeFlow->step);
+            $this->assertArrayNotHasKey('booking_date', $activeFlow->payload);
+            $this->assertArrayNotHasKey('start_time', $activeFlow->payload);
+            $this->assertSame(0, Booking::count());
+            $this->assertSame(0, AiAutomationApproval::count());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_booking_flow_does_not_select_ambiguous_availability_question_and_allows_time_correction(): void
     {
         Carbon::setTestNow('2026-06-27 10:00:00');
