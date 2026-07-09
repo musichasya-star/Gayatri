@@ -66,17 +66,31 @@ class ServiceCatalogService
 
         foreach ($addons as $addon) {
             $addonServiceId = (int) ($addon['addon_service_id'] ?? 0);
-            if ($addonServiceId <= 0 || $addonServiceId === $service->id) {
+            $addonName = trim((string) ($addon['addon_name'] ?? ''));
+            if (($addonServiceId <= 0 && $addonName === '') || $addonServiceId === $service->id) {
                 continue;
             }
 
-            $model = $service->addOns()->updateOrCreate([
-                'addon_service_id' => $addonServiceId,
-            ], [
+            $payload = [
+                'addon_service_id' => $addonServiceId > 0 ? $addonServiceId : null,
+                'addon_name' => $addonServiceId > 0 ? null : $addonName,
                 'duration_minutes' => (int) ($addon['duration_minutes'] ?? 0),
                 'price_adjustment' => (float) ($addon['price_adjustment'] ?? 0),
                 'is_active' => (bool) ($addon['is_active'] ?? true),
-            ]);
+            ];
+
+            $model = ! empty($addon['id'])
+                ? $service->addOns()->whereKey($addon['id'])->first()
+                : null;
+            $model ??= $addonServiceId > 0
+                ? $service->addOns()->where('addon_service_id', $addonServiceId)->first()
+                : null;
+
+            if ($model) {
+                $model->update($payload);
+            } else {
+                $model = $service->addOns()->create($payload);
+            }
 
             $keepIds[] = $model->id;
         }

@@ -257,7 +257,7 @@ class BookingService
             $booking->addOns()->create([
                 'service_addon_id' => $addon->id,
                 'addon_service_id' => $addon->addon_service_id,
-                'name' => $addon->addonService?->name ?: 'Addon layanan',
+                'name' => $addon->displayName() ?: 'Addon layanan',
                 'duration_minutes' => (int) $addon->duration_minutes,
                 'price' => (float) $addon->price_adjustment,
             ]);

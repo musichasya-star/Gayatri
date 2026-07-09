@@ -11,7 +11,8 @@ return new class extends Migration
         Schema::create('service_addons', function (Blueprint $table) {
             $table->id();
             $table->foreignId('service_id')->constrained('services')->cascadeOnDelete();
-            $table->foreignId('addon_service_id')->constrained('services')->cascadeOnDelete();
+            $table->foreignId('addon_service_id')->nullable()->constrained('services')->nullOnDelete();
+            $table->string('addon_name')->nullable();
             $table->unsignedInteger('duration_minutes')->default(0);
             $table->decimal('price_adjustment', 12, 2)->default(0);
             $table->boolean('is_active')->default(true);

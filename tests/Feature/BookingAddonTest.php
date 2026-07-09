@@ -95,4 +95,50 @@ class BookingAddonTest extends TestCase
         ]);
         $this->assertSame(1, $slot->fresh()->booked_count);
     }
+
+    public function test_custom_text_addon_can_be_used_without_existing_service(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Bunda Custom Addon',
+            'whatsapp_number' => '628123456701',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $base = Service::create(['name' => 'Baby Spa Premium', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        $addon = $base->addOns()->create([
+            'addon_name' => 'Hair Lotion',
+            'duration_minutes' => 10,
+            'price_adjustment' => 35000,
+            'is_active' => true,
+        ]);
+        $slot = AvailabilitySlot::create([
+            'service_id' => $base->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '13:00:00',
+            'end_time' => '14:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+
+        $booking = app(BookingService::class)->create([
+            'customer_id' => $customer->id,
+            'service_id' => $base->id,
+            'availability_slot_id' => $slot->id,
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '13:00',
+            'status' => BookingStatus::DRAFT,
+            'payment_status' => PaymentStatus::UNPAID,
+            'addons' => [$addon->id],
+        ], null);
+
+        $this->assertSame('14:10:00', (string) $booking->end_time);
+        $this->assertDatabaseHas('booking_addons', [
+            'booking_id' => $booking->id,
+            'service_addon_id' => $addon->id,
+            'addon_service_id' => null,
+            'name' => 'Hair Lotion',
+            'duration_minutes' => 10,
+            'price' => 35000,
+        ]);
+    }
 }

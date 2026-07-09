@@ -21,6 +21,8 @@
             $addonRows = $service->exists
                 ? $service->addOns->map(fn ($addon) => [
                     'addon_service_id' => $addon->addon_service_id,
+                    'addon_name' => $addon->addon_name,
+                    'id' => $addon->id,
                     'duration_minutes' => $addon->duration_minutes,
                     'price_adjustment' => $addon->price_adjustment,
                     'is_active' => (int) $addon->is_active,
@@ -28,7 +30,7 @@
                 : [];
         }
         if ($addonRows === []) {
-            $addonRows = [['addon_service_id' => '', 'duration_minutes' => 0, 'price_adjustment' => 0, 'is_active' => 1]];
+            $addonRows = [['id' => '', 'addon_service_id' => '', 'addon_name' => '', 'duration_minutes' => 0, 'price_adjustment' => 0, 'is_active' => 1]];
         }
     @endphp
 
@@ -70,7 +72,8 @@
                     </div>
                     <div data-addon-list style="display:grid; gap:.75rem;">
                         @foreach ($addonRows as $index => $addon)
-                            <div class="grid grid-4" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
+                            <div class="grid grid-5" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
+                                <input type="hidden" name="addons[{{ $index }}][id]" value="{{ $addon['id'] ?? '' }}">
                                 <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Layanan tambahan</span>
                                     <select class="input" name="addons[{{ $index }}][addon_service_id]">
                                         <option value="">Pilih addon</option>
@@ -79,6 +82,7 @@
                                         @endforeach
                                     </select>
                                 </label>
+                                <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Sub layanan custom</span><input class="input" type="text" name="addons[{{ $index }}][addon_name]" value="{{ $addon['addon_name'] ?? '' }}" placeholder="Contoh: Hair lotion"></label>
                                 <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Tambahan durasi</span><input class="input" type="number" min="0" name="addons[{{ $index }}][duration_minutes]" value="{{ $addon['duration_minutes'] ?? 0 }}"></label>
                                 <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Penyesuaian harga</span><input class="input" type="number" min="0" step="0.01" name="addons[{{ $index }}][price_adjustment]" value="{{ $addon['price_adjustment'] ?? 0 }}"></label>
                                 <div style="display:flex; gap:.5rem; align-items:end;">
@@ -104,7 +108,8 @@
     </div>
 
     <template data-addon-template>
-        <div class="grid grid-4" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
+        <div class="grid grid-5" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
+            <input type="hidden" data-name="id" value="">
             <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Layanan tambahan</span>
                 <select class="input" data-name="addon_service_id">
                     <option value="">Pilih addon</option>
@@ -113,6 +118,7 @@
                     @endforeach
                 </select>
             </label>
+            <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Sub layanan custom</span><input class="input" type="text" data-name="addon_name" placeholder="Contoh: Hair lotion"></label>
             <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Tambahan durasi</span><input class="input" type="number" min="0" value="0" data-name="duration_minutes"></label>
             <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Penyesuaian harga</span><input class="input" type="number" min="0" step="0.01" value="0" data-name="price_adjustment"></label>
             <div style="display:flex; gap:.5rem; align-items:end;">

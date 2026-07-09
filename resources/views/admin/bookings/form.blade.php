@@ -11,10 +11,10 @@
         $addonOptions = $services->mapWithKeys(fn ($service) => [
             $service->id => $service->activeAddOns->map(fn ($addon) => [
                 'id' => $addon->id,
-                'name' => $addon->addonService?->name,
+                'name' => $addon->displayName(),
                 'duration' => $addon->duration_minutes,
                 'price' => (float) $addon->price_adjustment,
-                'label' => ($addon->addonService?->name ?: 'Addon layanan').' +'.$addon->duration_minutes.' menit + Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.'),
+                'label' => ($addon->displayName() ?: 'Addon layanan').' +'.$addon->duration_minutes.' menit + Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.'),
             ])->values(),
         ]);
     @endphp

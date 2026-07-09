@@ -13,6 +13,7 @@ class ServiceAddon extends Model
     protected $fillable = [
         'service_id',
         'addon_service_id',
+        'addon_name',
         'duration_minutes',
         'price_adjustment',
         'is_active',
@@ -34,5 +35,10 @@ class ServiceAddon extends Model
     public function addonService(): BelongsTo
     {
         return $this->belongsTo(Service::class, 'addon_service_id');
+    }
+
+    public function displayName(): string
+    {
+        return $this->addonService?->name ?: (string) $this->addon_name;
     }
 }

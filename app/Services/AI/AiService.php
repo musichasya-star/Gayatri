@@ -679,7 +679,7 @@ class AiService
             ->first();
 
         $addons = $service?->activeAddOns
-            ->filter(fn ($addon) => $addon->addonService)
+            ->filter(fn ($addon) => $addon->displayName() !== '')
             ->values();
 
         if (! $addons || $addons->isEmpty()) {
@@ -687,7 +687,7 @@ class AiService
         }
 
         $list = $addons
-            ->map(fn ($addon, int $index) => ($index + 1).'. '.$addon->addonService->name.' (+'.$addon->duration_minutes.' menit, +Rp'.number_format((float) $addon->price_adjustment, 0, ',', '.').')')
+            ->map(fn ($addon, int $index) => ($index + 1).'. '.$addon->displayName().' (+'.$addon->duration_minutes.' menit, +Rp'.number_format((float) $addon->price_adjustment, 0, ',', '.').')')
             ->implode("\n");
 
         return "\n\nAddon yang bisa Bunda tambahkan:\n".$list."\nKalau ingin tambah addon, sebutkan nama addonnya ya.";

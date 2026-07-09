@@ -60,7 +60,7 @@
                             <td data-label="Harga">Rp {{ number_format((float) $service->price, 0, ',', '.') }}</td>
                             <td data-label="Addon">
                                 @if ($service->activeAddOns->isNotEmpty())
-                                    {{ $service->activeAddOns->map(fn ($addon) => ($addon->addonService?->name ?: 'Addon').' (+'.$addon->duration_minutes.' menit, Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.').')')->implode('; ') }}
+                                    {{ $service->activeAddOns->map(fn ($addon) => ($addon->displayName() ?: 'Addon').' (+'.$addon->duration_minutes.' menit, Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.').')')->implode('; ') }}
                                 @else
                                     -
                                 @endif
