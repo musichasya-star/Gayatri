@@ -88,4 +88,9 @@ class Booking extends Model
     {
         return $this->hasMany(Feedback::class);
     }
+
+    public function addOns(): HasMany
+    {
+        return $this->hasMany(BookingAddon::class);
+    }
 }

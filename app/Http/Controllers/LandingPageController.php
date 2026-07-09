@@ -30,7 +30,7 @@ class LandingPageController extends Controller
         $page = LandingPageSetting::query()->where('slug', 'home')->first();
 
         return view('landing.booking', [
-            'services' => Service::query()->where('is_active', true)->orderBy('name')->get(),
+            'services' => Service::query()->with(['activeAddOns.addonService'])->where('is_active', true)->orderBy('name')->get(),
             'branches' => Branch::query()->orderBy('name')->get(),
             'availabilitySlots' => $this->availableBookingSlots(),
             'bookingContent' => $this->bookingPageContent($page),
@@ -52,6 +52,8 @@ class LandingPageController extends Controller
             'booking_date' => ['required', 'date', 'after_or_equal:today'],
             'start_time' => ['required', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'addons' => ['nullable', 'array'],
+            'addons.*' => ['integer', 'exists:service_addons,id'],
         ]);
         try {
             $slot = $this->validatedAvailableSlot($data);
@@ -94,6 +96,7 @@ class LandingPageController extends Controller
                 'payment_status' => PaymentStatus::UNPAID,
                 'source' => 'landing_page',
                 'notes' => $data['notes'] ?? null,
+                'addons' => $data['addons'] ?? [],
             ], null);
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['booking' => $exception->getMessage()])->withInput();
@@ -119,6 +122,8 @@ class LandingPageController extends Controller
             'booking_date' => ['required', 'date', 'after_or_equal:today'],
             'start_time' => ['required', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'addons' => ['nullable', 'array'],
+            'addons.*' => ['integer', 'exists:service_addons,id'],
         ]);
         try {
             $slot = $this->validatedAvailableSlot($data, $booking);
@@ -142,6 +147,7 @@ class LandingPageController extends Controller
                 'status' => BookingStatus::PENDING_CONFIRMATION,
                 'payment_status' => $booking->payment_status,
                 'notes' => trim(($booking->notes ? $booking->notes.PHP_EOL : '').'Perubahan jadwal dari landing page: '.($data['notes'] ?? '-')),
+                'addons' => $data['addons'] ?? [],
             ]);
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['booking' => $exception->getMessage()])->withInput();
@@ -174,7 +180,7 @@ class LandingPageController extends Controller
         }
 
         $booking = Booking::query()
-            ->with(['customer', 'service', 'branch'])
+            ->with(['customer', 'service', 'branch', 'addOns'])
             ->whereKey($bookingId)
             ->first();
 

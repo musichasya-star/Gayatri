@@ -18,7 +18,7 @@ class ServiceController extends Controller
     public function index(Request $request): View
     {
         $services = Service::query()
-            ->with('branch')
+            ->with(['branch', 'activeAddOns.addonService'])
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->string('search');
 
@@ -44,6 +44,7 @@ class ServiceController extends Controller
         return view('admin.services.form', [
             'service' => new Service(['duration_minutes' => 60, 'is_active' => true]),
             'branches' => Branch::orderBy('name')->get(),
+            'addonServices' => Service::where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -56,9 +57,12 @@ class ServiceController extends Controller
 
     public function edit(Service $service): View
     {
+        $service->load('addOns.addonService');
+
         return view('admin.services.form', [
             'service' => $service,
             'branches' => Branch::orderBy('name')->get(),
+            'addonServices' => Service::where('is_active', true)->whereKeyNot($service->id)->orderBy('name')->get(),
         ]);
     }
 

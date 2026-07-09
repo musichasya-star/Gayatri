@@ -3,6 +3,7 @@
     $selectedServiceId = (string) old('service_id', $booking?->service_id);
     $selectedBranchId = (string) old('branch_id', $booking?->branch_id);
     $selectedSlotId = (string) old('availability_slot_id', $booking?->availability_slot_id);
+    $selectedAddonIds = collect(old('addons', $booking?->addOns?->pluck('service_addon_id')->filter()->values()->all() ?? []))->map(fn ($id) => (string) $id)->all();
     $selectedDate = old('booking_date', $booking?->booking_date?->format('Y-m-d'));
     $selectedTime = old('start_time', $booking ? substr((string) $booking->start_time, 0, 5) : null);
     $slotOptions = $availabilitySlots->map(fn ($slot) => [
@@ -26,11 +27,20 @@
         'dateValue' => $fieldId.'-date-value',
         'timeValue' => $fieldId.'-time-value',
         'help' => $fieldId.'-slot-help',
+        'addons' => $fieldId.'-addons',
+        'addonHelp' => $fieldId.'-addon-help',
     ];
     $selectedValues = [
         'date' => $selectedDate,
         'slotId' => $selectedSlotId,
+        'addonIds' => $selectedAddonIds,
     ];
+    $addonOptions = $services->mapWithKeys(fn ($service) => [
+        $service->id => $service->activeAddOns->map(fn ($addon) => [
+            'id' => $addon->id,
+            'label' => ($addon->addonService?->name ?: 'Addon layanan').' +'.$addon->duration_minutes.' menit + Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.'),
+        ])->values(),
+    ]);
 @endphp
 
 <label>
@@ -42,6 +52,11 @@
         @endforeach
     </select>
 </label>
+<div style="grid-column:1/-1;">
+    <span class="label">Addon / Tambah Layanan</span>
+    <div id="{{ $fieldId }}-addons" style="display:grid;gap:.55rem;"></div>
+    <span class="lead" id="{{ $fieldId }}-addon-help" style="display:block;margin:.35rem 0 0;font-size:.86rem;">Pilih layanan untuk melihat addon yang tersedia.</span>
+</div>
 <label>
     <span class="label">Cabang</span>
     <select class="input" name="branch_id" id="{{ $fieldId }}-branch">
@@ -83,6 +98,10 @@
     const dateValue = document.getElementById(ids.dateValue);
     const timeValue = document.getElementById(ids.timeValue);
     const help = document.getElementById(ids.help);
+    const addonTarget = document.getElementById(ids.addons);
+    const addonHelp = document.getElementById(ids.addonHelp);
+    const addonOptions = @json($addonOptions);
+    const selectedAddons = new Set(selected.addonIds || []);
 
     const labelForDate = (value) => slots.find((item) => item.date === value)?.date_label || value;
     const filteredSlots = () => slots.filter((item) => {
@@ -117,6 +136,28 @@
             date.value = current;
         }
         renderTimes();
+        renderAddons();
+    };
+
+    const renderAddons = () => {
+        addonTarget.innerHTML = '';
+        const rows = addonOptions[service.value] || [];
+        if (rows.length === 0) {
+            addonHelp.textContent = service.value ? 'Belum ada addon aktif untuk layanan ini.' : 'Pilih layanan untuk melihat addon yang tersedia.';
+            return;
+        }
+        rows.forEach((item) => {
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;gap:.55rem;align-items:center;border:1px solid rgba(216,195,165,.65);border-radius:.9rem;padding:.75rem;background:rgba(255,255,255,.6);';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.name = 'addons[]';
+            input.value = item.id;
+            input.checked = selectedAddons.has(String(item.id));
+            label.append(input, document.createTextNode(item.label));
+            addonTarget.append(label);
+        });
+        addonHelp.textContent = 'Durasi dan harga addon akan ditambahkan ke request booking.';
     };
 
     const renderTimes = () => {
@@ -150,6 +191,7 @@
     service.addEventListener('change', () => {
         selected.date = null;
         selected.slotId = null;
+        selectedAddons.clear();
         renderDates();
     });
     branch.addEventListener('change', () => {

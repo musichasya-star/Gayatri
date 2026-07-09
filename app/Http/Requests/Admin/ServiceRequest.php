@@ -21,6 +21,11 @@ class ServiceRequest extends FormRequest
             'price' => ['required', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
             'description' => ['nullable', 'string'],
+            'addons' => ['nullable', 'array'],
+            'addons.*.addon_service_id' => ['nullable', 'exists:services,id'],
+            'addons.*.duration_minutes' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'addons.*.price_adjustment' => ['nullable', 'numeric', 'min:0'],
+            'addons.*.is_active' => ['nullable', 'boolean'],
         ];
     }
 }

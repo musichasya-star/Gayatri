@@ -82,6 +82,8 @@ class BookingController extends Controller
 
     public function edit(Booking $booking): View
     {
+        $booking->load('addOns');
+
         return $this->form($booking);
     }
 
@@ -116,7 +118,11 @@ class BookingController extends Controller
             'booking' => $booking,
             'customers' => Customer::orderBy('name')->get(),
             'branches' => Branch::orderBy('name')->get(),
-            'services' => Service::where('is_active', true)->orderBy('name')->get(),
+            'services' => Service::query()
+                ->with(['activeAddOns.addonService'])
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(),
             'therapists' => Therapist::orderBy('name')->get(),
             'promos' => Promo::query()->where('is_active', true)->orderBy('title')->get(),
             'availabilitySlots' => AvailabilitySlot::query()
@@ -147,6 +153,8 @@ class BookingController extends Controller
             'status' => ['required', Rule::in(BookingStatus::all())],
             'payment_status' => ['required', Rule::in(PaymentStatus::all())],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'addons' => ['nullable', 'array'],
+            'addons.*' => ['integer', 'exists:service_addons,id'],
         ]);
     }
 }

@@ -9,6 +9,7 @@ use App\Models\CampaignRecipient;
 use App\Models\Conversation;
 use App\Models\Promo;
 use App\Models\Service;
+use App\Models\ServiceAddon;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
@@ -36,8 +37,11 @@ class BookingService
             throw new InvalidArgumentException('Tanggal booking tidak boleh di masa lalu.');
         }
 
+        $selectedAddOns = $this->selectedAddOns($service->id, $data['addons'] ?? []);
+        $extraDuration = (int) $selectedAddOns->sum('duration_minutes');
         $startTime = Carbon::createFromFormat('H:i', substr($data['start_time'], 0, 5));
-        $endTime = (clone $startTime)->addMinutes((int) $service->duration_minutes);
+        $slotEndTime = (clone $startTime)->addMinutes((int) $service->duration_minutes);
+        $endTime = (clone $startTime)->addMinutes((int) $service->duration_minutes + $extraDuration);
 
         $this->validateOperatingHours($startTime, $endTime);
 
@@ -45,7 +49,7 @@ class BookingService
             throw new InvalidArgumentException('Jadwal terapis bentrok dengan booking lain.');
         }
 
-        $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $endTime->format('H:i:s'));
+        $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $slotEndTime->format('H:i:s'));
         $promo = $this->validPromo($data['promo_id'] ?? null);
 
         $booking = Booking::create([
@@ -67,6 +71,7 @@ class BookingService
             'promo_discount' => $this->discountAmount($promo, (float) $service->price),
             'notes' => $data['notes'] ?? null,
         ]);
+        $this->syncBookingAddOns($booking, $selectedAddOns);
 
         if ($promo) {
             $promo->increment('used_count');
@@ -103,8 +108,11 @@ class BookingService
             throw new InvalidArgumentException('Tanggal booking tidak boleh di masa lalu.');
         }
 
+        $selectedAddOns = $this->selectedAddOns($service->id, $data['addons'] ?? []);
+        $extraDuration = (int) $selectedAddOns->sum('duration_minutes');
         $startTime = Carbon::createFromFormat('H:i', substr($data['start_time'], 0, 5));
-        $endTime = (clone $startTime)->addMinutes((int) $service->duration_minutes);
+        $slotEndTime = (clone $startTime)->addMinutes((int) $service->duration_minutes);
+        $endTime = (clone $startTime)->addMinutes((int) $service->duration_minutes + $extraDuration);
 
         $this->validateOperatingHours($startTime, $endTime);
 
@@ -115,7 +123,7 @@ class BookingService
         $oldPromoId = $booking->promo_id;
         $oldSlot = $booking->availabilitySlot;
         $promo = $this->validPromo($data['promo_id'] ?? null, $oldPromoId);
-        $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $endTime->format('H:i:s'), $booking);
+        $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $slotEndTime->format('H:i:s'), $booking);
 
         $oldStatus = $booking->status;
         $oldBookingDate = $booking->booking_date?->toDateString();
@@ -138,6 +146,7 @@ class BookingService
             'promo_discount' => $this->discountAmount($promo, (float) $service->price),
             'notes' => $data['notes'] ?? null,
         ]);
+        $this->syncBookingAddOns($booking, $selectedAddOns);
 
         $this->syncPromoUsage($oldPromoId, $promo?->id);
         $this->syncSlotUsage($oldSlot, $slot, $booking);
@@ -212,6 +221,47 @@ class BookingService
         } while (Booking::where('booking_code', $code)->exists());
 
         return $code;
+    }
+
+    private function selectedAddOns(int $serviceId, array $addonIds)
+    {
+        $ids = collect($addonIds)
+            ->filter(fn ($id) => filled($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $addons = ServiceAddon::query()
+            ->with('addonService')
+            ->where('service_id', $serviceId)
+            ->where('is_active', true)
+            ->whereIn('id', $ids)
+            ->get();
+
+        if ($addons->count() !== $ids->count()) {
+            throw new InvalidArgumentException('Addon layanan tidak sesuai dengan layanan utama.');
+        }
+
+        return $addons;
+    }
+
+    private function syncBookingAddOns(Booking $booking, $addons): void
+    {
+        $booking->addOns()->delete();
+
+        foreach ($addons as $addon) {
+            $booking->addOns()->create([
+                'service_addon_id' => $addon->id,
+                'addon_service_id' => $addon->addon_service_id,
+                'name' => $addon->addonService?->name ?: 'Addon layanan',
+                'duration_minutes' => (int) $addon->duration_minutes,
+                'price' => (float) $addon->price_adjustment,
+            ]);
+        }
     }
 
     private function validateOperatingHours(Carbon $startTime, Carbon $endTime): void

@@ -645,11 +645,14 @@ class AiService
                 ."\n\nKalau sudah sesuai, Bunda bisa balas Iya batalkan. Kalau tidak jadi dibatalkan, balas Tidak ya.";
         }
 
+        $addonOffer = $this->addonOfferText($bookingContext['service_id'] ?? null);
+
         return ($isReschedule ? 'Siap Bunda, saya sudah catat permintaan ubah jadwalnya. Mohon cek kembali detail berikut:' : 'Siap Bunda, data reservasinya sudah lengkap. Mohon cek kembali detail berikut:')
             ."\nLayanan: ".($bookingContext['service_name'] ?? '-')
             .($isReschedule ? "\nJadwal lama: ".($bookingContext['current_booking_date'] ?? '-').' '.substr((string) ($bookingContext['current_start_time'] ?? ''), 0, 5) : '')
             ."\nTanggal: ".($bookingContext['booking_date'] ?? '-')
             ."\nJam: ".substr((string) ($bookingContext['start_time'] ?? ''), 0, 5)
+            .$addonOffer
             ."\n\nJika detailnya sudah benar, balas Iya lanjutkan agar kami proses. Kalau belum sesuai atau batal, balas Tidak ya.";
     }
 
@@ -662,6 +665,32 @@ class AiService
             ."\nJam: ".substr((string) ($bookingContext['active_start_time'] ?? ''), 0, 5)
             ."\n\nBunda ingin membuat reservasi baru atau mengubah jadwal reservasi yang sudah ada?"
             ."\nBalas: Booking baru / Ubah jadwal.";
+    }
+
+    private function addonOfferText($serviceId): string
+    {
+        if (! $serviceId) {
+            return '';
+        }
+
+        $service = Service::query()
+            ->whereKey($serviceId)
+            ->with(['activeAddOns.addonService'])
+            ->first();
+
+        $addons = $service?->activeAddOns
+            ->filter(fn ($addon) => $addon->addonService)
+            ->values();
+
+        if (! $addons || $addons->isEmpty()) {
+            return '';
+        }
+
+        $list = $addons
+            ->map(fn ($addon, int $index) => ($index + 1).'. '.$addon->addonService->name.' (+'.$addon->duration_minutes.' menit, +Rp'.number_format((float) $addon->price_adjustment, 0, ',', '.').')')
+            ->implode("\n");
+
+        return "\n\nAddon yang bisa Bunda tambahkan:\n".$list."\nKalau ingin tambah addon, sebutkan nama addonnya ya.";
     }
 
     private function bookingLookupReply(?int $customerId, ?string $bookingDate = null, ?int $conversationId = null): string

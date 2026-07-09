@@ -45,6 +45,7 @@
                         <th>Kategori</th>
                         <th>Durasi</th>
                         <th>Harga</th>
+                        <th>Addon</th>
                         <th>Status</th>
                         <th>Aksi</th>
                     </tr>
@@ -57,6 +58,13 @@
                             <td data-label="Kategori">{{ $service->category ?: '-' }}</td>
                             <td data-label="Durasi">{{ $service->duration_minutes }} menit</td>
                             <td data-label="Harga">Rp {{ number_format((float) $service->price, 0, ',', '.') }}</td>
+                            <td data-label="Addon">
+                                @if ($service->activeAddOns->isNotEmpty())
+                                    {{ $service->activeAddOns->map(fn ($addon) => ($addon->addonService?->name ?: 'Addon').' (+'.$addon->duration_minutes.' menit, Rp '.number_format((float) $addon->price_adjustment, 0, ',', '.').')')->implode('; ') }}
+                                @else
+                                    -
+                                @endif
+                            </td>
                             <td data-label="Status"><span class="badge {{ $service->is_active ? 'badge-green' : 'badge-red' }}">{{ $service->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
                             <td data-label="Aksi">
                                 <div style="display: flex; gap: .4rem; flex-wrap: wrap;">
@@ -72,7 +80,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 2rem;">Belum ada layanan yang sesuai filter.</td>
+                            <td colspan="8" style="text-align: center; padding: 2rem;">Belum ada layanan yang sesuai filter.</td>
                         </tr>
                     @endforelse
                 </tbody>

@@ -38,4 +38,14 @@ class Service extends Model
     {
         return $this->hasMany(Booking::class);
     }
+
+    public function addOns(): HasMany
+    {
+        return $this->hasMany(ServiceAddon::class);
+    }
+
+    public function activeAddOns(): HasMany
+    {
+        return $this->addOns()->where('is_active', true);
+    }
 }
