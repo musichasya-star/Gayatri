@@ -95,6 +95,35 @@ class ConversationFlowTest extends TestCase
         $this->assertArrayNotHasKey('name', ConversationFlow::latest('id')->first()->payload ?? []);
     }
 
+    public function test_booking_flow_matches_base_service_name_when_service_has_age_and_duration_suffix(): void
+    {
+        $service = Service::create([
+            'name' => 'Girl Massage (13-20 Tahun) - 60Menit',
+            'category' => 'girl massage',
+            'duration_minutes' => 60,
+            'price' => 150000,
+            'is_active' => true,
+        ]);
+
+        foreach (['saya ingin girl massage', 'Girl Massage'] as $index => $serviceText) {
+            [$customer, $conversation] = $this->conversation('62817770009'.($index + 1));
+            $flow = app(ConversationFlowService::class);
+
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya mau booking'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'Krisna'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, '08177700099'));
+            $flow->handle($conversation, $this->incoming($conversation, $customer, 'Kediri kota'));
+            $reply = $flow->handle($conversation, $this->incoming($conversation, $customer, $serviceText));
+
+            $activeFlow = ConversationFlow::latest('id')->first();
+
+            $this->assertStringContainsString('tanggal kunjungannya', $reply['reply']);
+            $this->assertStringNotContainsString('Layanan tersebut belum saya temukan', $reply['reply']);
+            $this->assertSame('ask_date', $activeFlow->step);
+            $this->assertSame($service->id, $activeFlow->payload['service_id'] ?? null);
+        }
+    }
+
     public function test_booking_flow_extracts_name_from_common_intro_phrase(): void
     {
         [$customer, $conversation] = $this->conversation('628177700007');
@@ -331,7 +360,7 @@ class ConversationFlowTest extends TestCase
             'whatsapp_number' => $phone,
             'status' => CustomerStatus::LEAD,
         ]);
-        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $session = WhatsAppSession::firstOrCreate(['session_name' => 'default'], ['status' => 'working']);
         $conversation = Conversation::create([
             'customer_id' => $customer->id,
             'whatsapp_session_id' => $session->id,

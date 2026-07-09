@@ -674,11 +674,26 @@ class ConversationFlowService
         $normalizedText = $this->normalizeServiceTerms($text);
 
         return collect($this->activeServices())->first(function (Service $service) use ($normalizedText) {
-            $categoryText = (string) $service->category;
-            $matchByCategory = $categoryText !== '' && Str::contains($normalizedText, Str::lower(str_replace('-', ' ', $categoryText)));
-
-            return Str::contains($normalizedText, Str::lower($service->name)) || $matchByCategory;
+            return $this->serviceMatchesText($normalizedText, $service);
         });
+    }
+
+    private function serviceMatchesText(string $normalizedText, Service $service): bool
+    {
+        $serviceName = $this->normalizeServiceTerms($service->name);
+        $baseServiceName = $this->baseServiceName($serviceName);
+        $categoryText = $this->normalizeServiceTerms(str_replace('-', ' ', (string) $service->category));
+
+        return Str::contains($normalizedText, $serviceName)
+            || ($baseServiceName !== '' && Str::contains($normalizedText, $baseServiceName))
+            || ($categoryText !== '' && Str::contains($normalizedText, $categoryText));
+    }
+
+    private function baseServiceName(string $normalizedServiceName): string
+    {
+        $baseName = preg_replace('/\s*[\(\-].*$/', '', $normalizedServiceName);
+
+        return Str::of($baseName ?: $normalizedServiceName)->squish()->toString();
     }
 
     private function activeServices(): array
