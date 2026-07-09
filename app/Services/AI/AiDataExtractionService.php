@@ -53,8 +53,8 @@ class AiDataExtractionService
     public function extract(string $text): array
     {
         $normalized = $this->normalizeServiceTerms($text);
-        $intent = $this->detectIntent($normalized);
         $service = $this->isBenchmarkBaseline() ? $this->detectServiceFromDb($normalized) : $this->detectServiceFromCache($normalized);
+        $intent = $this->detectIntent($normalized, $service);
         $bookingDate = $this->detectBookingDate($normalized);
         $startTime = $this->detectTime($normalized);
         $slotData = $this->detectSlot($service, $bookingDate, $startTime);
@@ -111,7 +111,7 @@ class AiDataExtractionService
         ];
     }
 
-    private function detectIntent(string $text): string
+    private function detectIntent(string $text, ?Service $service = null): string
     {
         if (Str::contains($text, ['demam', 'obat', 'diagnosis', 'dokter', 'kejang', 'diare', 'muntah'])) {
             return 'medical';
@@ -141,7 +141,9 @@ class AiDataExtractionService
             return 'general_inquiry';
         }
 
-        if (Str::contains($text, ['booking', 'jadwal', 'reservasi', 'besok', 'jam ', 'pukul '])) {
+        if (Str::contains($text, ['booking', 'jadwal', 'reservasi', 'besok', 'jam ', 'pukul '])
+            || ($service && Str::contains($text, ['mau', 'ingin', 'pilih', 'ambil', 'pesan']))
+        ) {
             return 'booking_request';
         }
 
@@ -169,7 +171,7 @@ class AiDataExtractionService
             ->orderBy('name')
             ->get()
             ->first(function (Service $service) use ($text) {
-                return Str::contains($text, Str::lower($service->name))
+                return $this->serviceNameMatches($text, $service)
                     || ($service->category && Str::contains($text, Str::lower(str_replace('-', ' ', (string) $service->category))));
             });
     }
@@ -177,9 +179,18 @@ class AiDataExtractionService
     private function detectServiceFromCache(string $text): ?Service
     {
         return collect($this->activeServices())->first(function (Service $service) use ($text) {
-            return Str::contains($text, Str::lower($service->name))
+            return $this->serviceNameMatches($text, $service)
                 || ($service->category && Str::contains($text, Str::lower(str_replace('-', ' ', $service->category))));
         });
+    }
+
+    private function serviceNameMatches(string $text, Service $service): bool
+    {
+        $name = Str::of($service->name)->lower()->squish()->toString();
+        $baseName = Str::of(preg_replace('/\s*[\(\-].*$/', '', $name))->squish()->toString();
+
+        return Str::contains($text, $name)
+            || ($baseName !== '' && Str::contains($text, $baseName));
     }
 
     private function activeServices(): array

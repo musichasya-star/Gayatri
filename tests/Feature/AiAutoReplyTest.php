@@ -682,6 +682,80 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('Iya batalkan', $result['reply']);
     }
 
+    public function test_service_choice_after_cancelled_context_starts_new_booking(): void
+    {
+        $this->seedAiSetup();
+        $oldService = Service::create(['name' => 'Pijat Bayi Balita', 'category' => 'Pijat Bayi', 'duration_minutes' => 60, 'price' => 50000, 'is_active' => true]);
+        Service::create(['name' => 'Girl Massage (13-20 Tahun) - 60Menit', 'category' => 'girl massage', 'duration_minutes' => 60, 'price' => 150000, 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Bunda Girl Massage', 'whatsapp_number' => '628123450044', 'status' => CustomerStatus::LEAD]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450044@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::AI_HANDLED,
+            'ai_enabled' => true,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'service_id' => $oldService->id,
+            'booking_code' => 'BK-GAY-260708-VDC5',
+            'booking_date' => now()->toDateString(),
+            'start_time' => '15:00:00',
+            'end_time' => '16:00:00',
+            'status' => BookingStatus::CANCELLED,
+            'payment_status' => 'unpaid',
+            'source' => 'manual',
+        ]);
+        AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_cancel_request',
+            'confidence_score' => 0.95,
+            'extracted_customer_data' => [],
+            'extracted_booking_data' => [
+                'action' => 'cancel_booking',
+                'booking_id' => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'booking_status' => BookingStatus::CONFIRMED,
+                'service_id' => $oldService->id,
+                'service_name' => $oldService->name,
+                'booking_date' => $booking->booking_date?->toDateString(),
+                'start_time' => $booking->start_time,
+            ],
+            'missing_fields' => [],
+            'raw_ai_response' => [],
+            'status' => 'awaiting_confirmation',
+        ]);
+
+        Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-ai-girl-massage-out-001'], 200)]);
+
+        $this->withHeaders(['X-Webhook-Secret' => 'secret-123'])
+            ->postJson(route('webhooks.waha.messages'), [
+                'event' => 'message',
+                'session' => 'default',
+                'payload' => [
+                    'id' => 'wamid-ai-girl-massage-in-001',
+                    'timestamp' => 1710000000,
+                    'from' => '628123450044@c.us',
+                    'fromMe' => false,
+                    'body' => 'saya mau Girl Massage',
+                    'hasMedia' => false,
+                ],
+            ])
+            ->assertOk();
+
+        $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->latest('id')->value('content');
+
+        $this->assertStringContainsString('Girl Massage (13-20 Tahun) - 60Menit sudah saya catat', $reply);
+        $this->assertStringContainsString('hari atau tanggal kunjungan', $reply);
+        $this->assertStringContainsString('perkiraan jam', $reply);
+        $this->assertStringNotContainsString('sudah berstatus cancelled', strtolower($reply));
+        $this->assertStringNotContainsString('Layanan yang tersedia saat ini', $reply);
+    }
+
     public function test_member_card_question_uses_member_card_knowledge_first(): void
     {
         $this->seedAiSetup();

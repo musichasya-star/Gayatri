@@ -49,12 +49,13 @@ class AiService
             $text = $this->normalizeServiceTerms($message);
             $knowledgeQuestion = $this->isKnowledgeQuestion($text);
             $serviceListQuestion = $this->isServiceListQuestion($text);
-            $ignorePriorBookingContext = $this->shouldIgnorePriorBookingContext($text);
+            $serviceChoiceQuestion = $this->isServiceChoiceQuestion($text);
+            $ignorePriorBookingContext = $this->shouldIgnorePriorBookingContext($text) || $serviceChoiceQuestion;
             $extraction = $ignorePriorBookingContext
                 ? app(AiDataExtractionService::class)->extract($message)
                 : $this->extractionForContext($message, $context);
             $bookingContext = $ignorePriorBookingContext
-                ? []
+                ? ($serviceChoiceQuestion ? $this->bookingContextFromExtraction($extraction) : [])
                 : ($this->bookingContextForMessage($context['message_id'] ?? null) ?: $this->bookingContext($message));
             $bookingContext = $this->refreshBookingContext($bookingContext);
             $pricingIntent = $this->isPricingQuestion($text);
@@ -142,7 +143,7 @@ class AiService
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingConfirmationReply($bookingContext), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
-            if (! $scheduleIntent && ($serviceListQuestion || ($serviceInquiryIntent && ! $knowledgeQuestion && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())))) {
+            if (! $serviceChoiceQuestion && ! $scheduleIntent && ($serviceListQuestion || ($serviceInquiryIntent && ! $knowledgeQuestion && (Str::contains($text, ['pijat', 'massage', 'layanan', 'treatment', 'jasa', 'paket']) || $knowledge->isEmpty())))) {
                 $context['reply_source'] = 'local';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->buildLocalReply($message, $persona, ''), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
@@ -161,7 +162,11 @@ class AiService
                     return $this->logAndReturn($message, $persona, $knowledge->first(), 'Baik Bunda, proses reservasi tidak saya lanjutkan. Kalau nanti ingin booking lagi, Bunda bisa chat kami kapan saja ya.', 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
                 }
 
-                return $this->logAndReturn($message, $persona, $knowledge->first(), $this->bookingMissingFieldsReply($bookingContext['missing_fields']), 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
+                $reply = $serviceChoiceQuestion
+                    ? $this->serviceChoiceMissingFieldsReply($bookingContext)
+                    : $this->bookingMissingFieldsReply($bookingContext['missing_fields']);
+
+                return $this->logAndReturn($message, $persona, $knowledge->first(), $reply, 0.88, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
 
             $answerKnowledge = $this->answerKnowledge($knowledge);
@@ -318,6 +323,27 @@ class AiService
             || $this->isCurrentTimeQuestion($text)
             || $this->isConversationalMessage($text)
             || $this->isOperationalInquiry($text);
+    }
+
+    private function isServiceChoiceQuestion(string $text): bool
+    {
+        if (! Str::contains($text, ['mau', 'ingin', 'pilih', 'ambil', 'pesan'])) {
+            return false;
+        }
+
+        return Service::query()
+            ->where('is_active', true)
+            ->get(['name'])
+            ->contains(fn (Service $service) => $this->serviceNameMatches($text, $service->name));
+    }
+
+    private function serviceNameMatches(string $text, string $serviceName): bool
+    {
+        $name = Str::of($serviceName)->lower()->squish()->toString();
+        $baseName = Str::of(preg_replace('/\s*[\(\-].*$/', '', $name))->squish()->toString();
+
+        return Str::contains($text, $name)
+            || ($baseName !== '' && Str::contains($text, $baseName));
     }
 
     private function isAvailabilityInquiry(string $text): bool
@@ -558,6 +584,15 @@ class AiService
         return array_filter(($result['booking'] ?? []) + ['missing_fields' => $result['missing_fields'] ?? []], fn ($value) => $value !== null && $value !== [] && $value !== '');
     }
 
+    private function bookingContextFromExtraction(array $extraction): array
+    {
+        if (! in_array($extraction['intent'] ?? null, ['booking_request', 'booking_reschedule_request', 'booking_cancel_request', 'booking_clarification_required'], true)) {
+            return [];
+        }
+
+        return array_filter(($extraction['booking'] ?? []) + ['missing_fields' => $extraction['missing_fields'] ?? []], fn ($value) => $value !== null && $value !== [] && $value !== '');
+    }
+
     private function refreshBookingContext(array $bookingContext): array
     {
         if ($bookingContext === [] || ($bookingContext['action'] ?? null) !== 'cancel_booking') {
@@ -624,6 +659,11 @@ class AiService
     private function bookingMissingFieldsReply(array $missingFields): string
     {
         return 'Baik Bunda, data booking sebelumnya sudah saya catat. Tinggal lengkapi: '.$this->humanMissingFields($missingFields).'.';
+    }
+
+    private function serviceChoiceMissingFieldsReply(array $bookingContext): string
+    {
+        return 'Baik Bunda, layanan '.($bookingContext['service_name'] ?? 'yang Bunda pilih').' sudah saya catat. Tinggal lengkapi: '.$this->humanMissingFields($bookingContext['missing_fields'] ?? []).'.';
     }
 
     private function bookingConfirmationReply(array $bookingContext): string
