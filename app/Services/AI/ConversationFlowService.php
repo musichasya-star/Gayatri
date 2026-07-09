@@ -10,6 +10,7 @@ use App\Models\ConversationFlow;
 use App\Models\Message;
 use App\Models\Promo;
 use App\Models\Service;
+use App\Models\ServiceAddon;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use Illuminate\Support\Str;
@@ -154,6 +155,7 @@ class ConversationFlowService
             'ask_whatsapp' => $this->stepWhatsapp($flow, $message),
             'ask_address' => $this->stepAddress($flow, $message),
             'ask_service' => $this->stepService($flow, $message),
+            'ask_addon' => $this->stepAddon($flow, $message),
             'ask_date' => $this->stepDate($flow, $message),
             'ask_time' => $this->stepTime($flow, $message),
             'confirm' => $this->stepConfirm($flow, $message),
@@ -224,7 +226,46 @@ class ConversationFlowService
             return $this->invalid($flow, $message, 'Layanan tersebut belum saya temukan, Bunda. Saat ini tersedia: '.$this->activeServicesText().'. Bunda pilih yang mana?');
         }
 
-        return $this->advance($flow, $message, ['service_id' => $service->id, 'service_name' => $service->name], 'ask_date', 'Siap Bunda, untuk tanggal kunjungannya kapan? Boleh tulis seperti: hari ini, besok, lusa, atau 28 Juni. Kalau ingin lihat jadwal ready, Bunda bisa tanya "jadwal yang tersedia".');
+        $updates = ['service_id' => $service->id, 'service_name' => $service->name, 'addons' => [], 'addon_names' => []];
+        $addons = $this->activeAddOnsForService($service->id);
+
+        if ($addons->isNotEmpty()) {
+            return $this->advance($flow, $message, $updates, 'ask_addon', 'Untuk layanan '.$service->name.', ada addon yang bisa Bunda tambahkan:'."\n".$this->addonOptionsText($addons)."\n\nBunda mau tambah addon yang mana? Balas nama/nomornya, atau balas \"tanpa addon\".");
+        }
+
+        return $this->advance($flow, $message, $updates, 'ask_date', 'Siap Bunda, untuk tanggal kunjungannya kapan? Boleh tulis seperti: hari ini, besok, lusa, atau 28 Juni. Kalau ingin lihat jadwal ready, Bunda bisa tanya "jadwal yang tersedia".');
+    }
+
+    private function stepAddon(ConversationFlow $flow, Message $message): array
+    {
+        $serviceId = (int) ($flow->payload['service_id'] ?? 0);
+        if ($serviceId <= 0) {
+            return $this->advance($flow, $message, ['addons' => [], 'addon_names' => []], 'ask_service', 'Boleh pilih layanan utamanya dulu ya Bunda.');
+        }
+
+        $addons = $this->activeAddOnsForService($serviceId);
+        if ($addons->isEmpty()) {
+            return $this->advance($flow, $message, ['addons' => [], 'addon_names' => []], 'ask_date', 'Siap Bunda, untuk tanggal kunjungannya kapan? Boleh tulis seperti: hari ini, besok, lusa, atau 28 Juni.');
+        }
+
+        $text = Str::of((string) $message->content)->lower()->squish()->toString();
+        if ($this->isNoAddonReply($text)) {
+            return $this->advance($flow, $message, ['addons' => [], 'addon_names' => []], 'ask_date', 'Baik Bunda, tanpa addon saya catat. Untuk tanggal kunjungannya kapan? Boleh tulis seperti: hari ini, besok, lusa, atau 28 Juni.');
+        }
+
+        $selectedAddons = $this->addOnsFromText((string) $message->content, $addons);
+        if ($selectedAddons->isEmpty()) {
+            if ($questionReply = $this->flowQuestionReply($flow, $message)) {
+                return $questionReply;
+            }
+
+            return $this->invalid($flow, $message, 'Addon tersebut belum saya temukan, Bunda. Pilihan addon: '.$this->addonOptionsInlineText($addons).'. Bunda bisa balas nama/nomor addon, atau "tanpa addon".');
+        }
+
+        $addonIds = $selectedAddons->pluck('id')->values()->all();
+        $addonNames = $selectedAddons->map(fn (ServiceAddon $addon) => $addon->displayName())->filter()->values()->all();
+
+        return $this->advance($flow, $message, ['addons' => $addonIds, 'addon_names' => $addonNames], 'ask_date', 'Siap Bunda, addon '.implode(', ', $addonNames).' saya tambahkan. Untuk tanggal kunjungannya kapan? Boleh tulis seperti: hari ini, besok, lusa, atau 28 Juni.');
     }
 
     private function stepDate(ConversationFlow $flow, Message $message): array
@@ -483,6 +524,7 @@ class ConversationFlowService
             'availability_slot_id' => $payload['availability_slot_id'] ?? null,
             'branch_id' => $payload['branch_id'] ?? null,
             'therapist_id' => $payload['therapist_id'] ?? null,
+            'addons' => $payload['addons'] ?? [],
             'source' => 'ai_flow',
         ], fn ($value) => $value !== null && $value !== '');
 
@@ -648,6 +690,8 @@ class ConversationFlowService
             'service_name' => $booking->service?->name,
             'branch_id' => $booking->branch_id,
             'therapist_id' => $booking->therapist_id,
+            'addons' => $booking->addOns->pluck('service_addon_id')->filter()->values()->all(),
+            'addon_names' => $booking->addOns->map(fn ($addon) => $addon->name)->filter()->values()->all(),
         ];
     }
 
@@ -669,9 +713,19 @@ class ConversationFlowService
             ."\nWhatsApp: ".(! empty($payload['whatsapp_number']) ? '+'.$payload['whatsapp_number'] : '-')
             ."\nAlamat: ".($payload['address'] ?? '-')
             ."\nLayanan: ".($payload['service_name'] ?? '-')
+            .$this->summaryAddOnsText($payload)
             ."\nTanggal: ".($payload['booking_date'] ?? '-')
             ."\nJam: ".substr((string) ($payload['start_time'] ?? ''), 0, 5)
             ."\n\nJika sudah benar, balas lanjutkan. Kalau tidak jadi, balas batal ya.";
+    }
+
+    private function summaryAddOnsText(array $payload): string
+    {
+        $addonNames = collect($payload['addon_names'] ?? [])->filter()->values();
+
+        return $addonNames->isNotEmpty()
+            ? "\nAddon: ".$addonNames->implode(', ')
+            : '';
     }
 
     private function extractName(string $text): ?string
@@ -704,6 +758,12 @@ class ConversationFlowService
             return $this->inform($flow, $message, 'Saya asisten WhatsApp Gayatri Mom & Baby Spa yang membantu info layanan dan reservasi, Bunda. '.$this->currentStepPrompt($flow));
         }
 
+        if ($flow->step === 'ask_addon' && Str::contains($text, ['addon', 'add on', 'tambahan', 'tambah layanan'])) {
+            $addons = $this->activeAddOnsForService((int) ($flow->payload['service_id'] ?? 0));
+
+            return $this->inform($flow, $message, 'Addon yang tersedia:'."\n".$this->addonOptionsText($addons)."\n\n".$this->currentStepPrompt($flow));
+        }
+
         if (Str::contains($this->normalizeServiceTerms($text), ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi'])) {
             return $this->inform($flow, $message, 'Layanan yang tersedia saat ini: '.$this->activeServicesText().'. '.$this->currentStepPrompt($flow));
         }
@@ -730,6 +790,7 @@ class ConversationFlowService
             'ask_whatsapp' => 'Boleh tuliskan nomor WhatsApp aktif untuk konfirmasi booking?',
             'ask_address' => 'Alamat lengkapnya di mana ya?',
             'ask_service' => 'Bunda pilih layanan yang mana?',
+            'ask_addon' => 'Bunda mau tambah addon yang mana? Balas nama/nomornya, atau balas "tanpa addon".',
             'ask_date' => 'Untuk tanggal kunjungannya kapan?',
             'ask_time' => 'Untuk jam reservasinya ingin pukul berapa?',
             'confirm' => 'Jika detail booking sudah benar, balas lanjutkan. Kalau tidak jadi, balas batal ya.',
@@ -780,6 +841,66 @@ class ConversationFlowService
         $baseName = preg_replace('/\s*[\(\-].*$/', '', $normalizedServiceName);
 
         return Str::of($baseName ?: $normalizedServiceName)->squish()->toString();
+    }
+
+    private function activeAddOnsForService(int $serviceId)
+    {
+        return ServiceAddon::query()
+            ->with('addonService')
+            ->where('service_id', $serviceId)
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (ServiceAddon $addon) => $addon->displayName() !== '')
+            ->values();
+    }
+
+    private function addonOptionsText($addons): string
+    {
+        return $addons
+            ->map(fn (ServiceAddon $addon, int $index) => ($index + 1).'. '.$addon->displayName().' (+'.$addon->duration_minutes.' menit, +Rp'.number_format((float) $addon->price_adjustment, 0, ',', '.').')')
+            ->implode("\n");
+    }
+
+    private function addonOptionsInlineText($addons): string
+    {
+        return $addons
+            ->map(fn (ServiceAddon $addon, int $index) => ($index + 1).'. '.$addon->displayName())
+            ->implode(', ');
+    }
+
+    private function isNoAddonReply(string $text): bool
+    {
+        return Str::contains($text, ['tanpa addon', 'tanpa tambahan', 'tidak pakai addon', 'tidak tambah', 'ga tambah', 'gak tambah', 'nggak tambah', 'no addon'])
+            || in_array($text, ['tidak', 'tdk', 'enggak', 'nggak', 'ga', 'gak', 'skip', 'lewati'], true);
+    }
+
+    private function addOnsFromText(string $text, $addons)
+    {
+        $normalizedText = $this->normalizeServiceTerms($text);
+
+        if (Str::contains($normalizedText, ['semua', 'all'])) {
+            return $addons;
+        }
+
+        $selected = collect();
+
+        foreach ($addons as $index => $addon) {
+            $displayName = $this->normalizeServiceTerms($addon->displayName());
+            $baseName = $this->baseServiceName($displayName);
+            $number = (string) ($index + 1);
+            $matchesNumber = preg_match('/(^|[^\d])'.preg_quote($number, '/').'([^\d]|$)/', $normalizedText) === 1;
+
+            if (
+                $matchesNumber
+                || ($displayName !== '' && Str::contains($normalizedText, $displayName))
+                || ($baseName !== '' && Str::contains($normalizedText, $baseName))
+            ) {
+                $selected->push($addon);
+            }
+        }
+
+        return $selected->unique('id')->values();
     }
 
     private function activeServices(): array

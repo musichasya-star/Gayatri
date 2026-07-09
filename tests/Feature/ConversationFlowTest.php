@@ -213,6 +213,70 @@ class ConversationFlowTest extends TestCase
             ->assertSee($booking->customer?->name ?: $customer->name);
     }
 
+    public function test_booking_flow_offers_and_stores_selected_addon(): void
+    {
+        [$customer, $conversation] = $this->conversation('628177700057');
+        $service = $this->service();
+        $addon = $service->addOns()->create([
+            'addon_name' => 'Hair Lotion',
+            'duration_minutes' => 10,
+            'price_adjustment' => 35000,
+            'is_active' => true,
+        ]);
+        $slot = AvailabilitySlot::create([
+            'service_id' => $service->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '14:00:00',
+            'end_time' => '15:00:00',
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        $flow = app(ConversationFlowService::class);
+
+        $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya mau booking'));
+        $flow->handle($conversation, $this->incoming($conversation, $customer, 'Krisna'));
+        $flow->handle($conversation, $this->incoming($conversation, $customer, '08177700057'));
+        $flow->handle($conversation, $this->incoming($conversation, $customer, 'Tulungagung kota'));
+        $addonOffer = $flow->handle($conversation, $this->incoming($conversation, $customer, 'baby spa'));
+
+        $this->assertStringContainsString('ada addon', $addonOffer['reply']);
+        $this->assertStringContainsString('Hair Lotion', $addonOffer['reply']);
+        $this->assertSame('ask_addon', ConversationFlow::latest('id')->first()->step);
+
+        $addonReply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'Hair Lotion'));
+
+        $this->assertStringContainsString('addon Hair Lotion saya tambahkan', $addonReply['reply']);
+        $this->assertSame([$addon->id], ConversationFlow::latest('id')->first()->payload['addons']);
+
+        $flow->handle($conversation, $this->incoming($conversation, $customer, 'besok'));
+        $summary = $flow->handle($conversation, $this->incoming($conversation, $customer, 'jam 2 siang'));
+
+        $this->assertStringContainsString('Addon: Hair Lotion', $summary['reply']);
+
+        $confirmed = $flow->handle($conversation, $this->incoming($conversation, $customer, 'lanjutkan'));
+
+        $this->assertStringContainsString('reservasi sudah kami proses', $confirmed['reply']);
+
+        $booking = Booking::query()
+            ->where('customer_id', $customer->id)
+            ->where('status', BookingStatus::PENDING)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame($slot->id, $booking->availability_slot_id);
+        $this->assertSame('15:10:00', (string) $booking->end_time);
+        $this->assertDatabaseHas('booking_addons', [
+            'booking_id' => $booking->id,
+            'service_addon_id' => $addon->id,
+            'addon_service_id' => null,
+            'name' => 'Hair Lotion',
+            'duration_minutes' => 10,
+            'price' => 35000,
+        ]);
+        $this->assertSame([$addon->id], data_get(AiAutomationApproval::latest('id')->first(), 'proposed_data.booking.addons'));
+    }
+
     public function test_reschedule_flow_uses_active_booking_and_validates_new_slot(): void
     {
         [$customer, $conversation] = $this->conversation('628177700003');
