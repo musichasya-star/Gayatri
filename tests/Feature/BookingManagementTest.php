@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AiAutomationApproval;
 use App\Models\AiExtractedData;
+use App\Models\AvailabilitySlot;
 use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\Conversation;
@@ -12,6 +13,7 @@ use App\Models\Service;
 use App\Models\Therapist;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use App\Support\PaymentStatus;
@@ -233,6 +235,45 @@ class BookingManagementTest extends TestCase
             'end_time' => '13:00:00',
             'status' => BookingStatus::CONFIRMED,
         ]);
+    }
+
+    public function test_admin_can_delete_booking_from_list_and_release_slot(): void
+    {
+        [$admin, $customer, $branch, $service, $therapist] = $this->seedBookingData();
+        $slot = AvailabilitySlot::create([
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '10:00:00',
+            'end_time' => '11:00:00',
+            'capacity' => 1,
+            'booked_count' => 1,
+            'status' => AvailabilitySlotStatus::FULL,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'availability_slot_id' => $slot->id,
+            'created_by' => $admin->id,
+            'booking_code' => 'BK-DELETE-001',
+            'booking_date' => now()->addDay()->toDateString(),
+            'start_time' => '10:00:00',
+            'end_time' => '11:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => PaymentStatus::UNPAID,
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.bookings.destroy', $booking))
+            ->assertRedirect(route('admin.bookings.index'));
+
+        $this->assertDatabaseMissing('bookings', ['id' => $booking->id]);
+        $this->assertSame(0, $slot->fresh()->booked_count);
+        $this->assertSame(AvailabilitySlotStatus::AVAILABLE, $slot->fresh()->status);
     }
 
     public function test_booking_list_shows_preview_approval_action(): void

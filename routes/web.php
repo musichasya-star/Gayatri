@@ -78,6 +78,7 @@ Route::prefix('admin')
             Route::post('/bookings', [BookingController::class, 'store'])->name('bookings.store');
             Route::get('/bookings/{booking}/edit', [BookingController::class, 'edit'])->name('bookings.edit');
             Route::put('/bookings/{booking}', [BookingController::class, 'update'])->name('bookings.update');
+            Route::delete('/bookings/{booking}', [BookingController::class, 'destroy'])->name('bookings.destroy');
             Route::get('/availability', [AvailabilitySlotController::class, 'index'])->name('availability.index');
             Route::post('/availability', [AvailabilitySlotController::class, 'store'])->name('availability.store');
             Route::post('/availability/bulk-generate', [AvailabilitySlotController::class, 'bulkGenerate'])->name('availability.bulk-generate');

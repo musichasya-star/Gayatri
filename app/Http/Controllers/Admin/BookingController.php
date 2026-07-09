@@ -100,6 +100,15 @@ class BookingController extends Controller
         return redirect()->route('admin.bookings.index')->with('status', 'Booking berhasil diperbarui.');
     }
 
+    public function destroy(Request $request, Booking $booking): RedirectResponse
+    {
+        $oldValues = $booking->only(['booking_code', 'customer_id', 'service_id', 'therapist_id', 'booking_date', 'start_time', 'status', 'payment_status']);
+        $this->bookingService->delete($booking);
+        $this->auditLogService->log($request->user(), 'booking.delete', null, $request, $oldValues, [], 'Booking deleted');
+
+        return redirect()->route('admin.bookings.index')->with('status', 'Booking berhasil dihapus.');
+    }
+
     public function calendar(Request $request): View
     {
         $date = $request->date('date') ?: now();

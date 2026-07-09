@@ -200,6 +200,18 @@ class BookingService
         return $booking->refresh();
     }
 
+    public function delete(Booking $booking): void
+    {
+        $slot = $booking->availabilitySlot;
+        $shouldReleaseSlot = ! in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW], true);
+
+        $booking->delete();
+
+        if ($shouldReleaseSlot) {
+            $this->releaseSlot($slot);
+        }
+    }
+
     public function hasConflict(int $therapistId, string $bookingDate, string $startTime, string $endTime, ?int $ignoreBookingId = null): bool
     {
         return Booking::query()
