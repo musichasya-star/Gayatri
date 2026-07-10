@@ -82,8 +82,10 @@ Route::prefix('admin')
             Route::get('/availability', [AvailabilitySlotController::class, 'index'])->name('availability.index');
             Route::post('/availability', [AvailabilitySlotController::class, 'store'])->name('availability.store');
             Route::post('/availability/bulk-generate', [AvailabilitySlotController::class, 'bulkGenerate'])->name('availability.bulk-generate');
+            Route::delete('/availability/bulk-delete', [AvailabilitySlotController::class, 'bulkDestroy'])->name('availability.bulk-destroy');
             Route::put('/availability/{slot}', [AvailabilitySlotController::class, 'update'])->name('availability.update');
             Route::post('/availability/{slot}/block', [AvailabilitySlotController::class, 'block'])->name('availability.block');
+            Route::delete('/availability/{slot}', [AvailabilitySlotController::class, 'destroy'])->name('availability.destroy');
             Route::get('/reminders', [ReminderController::class, 'index'])->name('reminders.index');
             Route::post('/reminders', [ReminderController::class, 'store'])->name('reminders.store');
             Route::post('/reminders/{reminder}/retry', [ReminderController::class, 'retry'])->name('reminders.retry');

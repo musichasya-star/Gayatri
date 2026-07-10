@@ -42,15 +42,38 @@
         <button class="button button-secondary" type="submit"><i data-lucide="search"></i> Filter</button>
     </form></div></div>
 
-    <div class="card"><div class="card-body"><table class="table-card"><thead><tr><th>Tanggal</th><th>Jam</th><th>Layanan</th><th>Cabang/Terapis</th><th>Kapasitas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
-        @forelse($slots as $slot)<tr>
+    <form id="bulk-delete-slots" method="POST" action="{{ route('admin.availability.bulk-destroy') }}" onsubmit="return confirm('Hapus slot jadwal yang dipilih? Slot yang sudah memiliki booking akan dilewati.');">@csrf @method('DELETE')</form>
+    <div class="card"><div class="card-body">
+        <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
+            <span class="muted">Pilih slot yang belum memiliki order/proses booking untuk hapus massal.</span>
+            <button class="button button-ghost" type="submit" form="bulk-delete-slots"><i data-lucide="trash"></i> Hapus Terpilih</button>
+        </div>
+        <table class="table-card"><thead><tr><th style="width:44px;"><input type="checkbox" data-slot-check-all aria-label="Pilih semua slot yang bisa dihapus"></th><th>Tanggal</th><th>Jam</th><th>Layanan</th><th>Cabang/Terapis</th><th>Kapasitas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        @forelse($slots as $slot)@php($canDelete = $slot->canBeDeleted())<tr>
+            <td data-label="Pilih">@if($canDelete)<input type="checkbox" name="slot_ids[]" value="{{ $slot->id }}" form="bulk-delete-slots" data-slot-check aria-label="Pilih slot {{ $slot->slot_date?->format('d M Y') }} {{ substr($slot->start_time,0,5) }}">@else<span class="muted">-</span>@endif</td>
             <td data-label="Tanggal">{{ $slot->slot_date?->format('d M Y') }}</td>
             <td data-label="Jam">{{ substr($slot->start_time,0,5) }} - {{ substr($slot->end_time,0,5) }}</td>
             <td data-label="Layanan">{{ $slot->service?->name }}</td>
             <td data-label="Cabang/Terapis">{{ $slot->branch?->name ?: 'Semua cabang' }}<br><span class="muted">{{ $slot->therapist?->name ?: 'Terapis siapa saja' }}</span></td>
             <td data-label="Kapasitas">{{ $slot->booked_count }} / {{ $slot->capacity }}</td>
             <td data-label="Status"><span class="badge {{ $slot->status === 'available' ? 'badge-green' : ($slot->status === 'full' ? 'badge-gold' : 'badge-red') }}">{{ $slot->status }}</span></td>
-            <td data-label="Aksi">@if($slot->status !== 'blocked')<form method="POST" action="{{ route('admin.availability.block', $slot) }}">@csrf<button class="button button-ghost" type="submit">Block</button></form>@else-@endif</td>
-        </tr>@empty<tr><td colspan="7" style="text-align:center;padding:2rem;">Belum ada slot jadwal untuk filter ini.</td></tr>@endforelse
+            <td data-label="Aksi">
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    @if($slot->status !== 'blocked')<form method="POST" action="{{ route('admin.availability.block', $slot) }}">@csrf<button class="button button-ghost" type="submit">Block</button></form>@endif
+                    @if($canDelete)
+                        <form method="POST" action="{{ route('admin.availability.destroy', $slot) }}" onsubmit="return confirm('Hapus slot jadwal ini?');">@csrf @method('DELETE')<button class="button button-ghost" type="submit"><i data-lucide="trash"></i> Hapus</button></form>
+                    @else
+                        <button class="button button-ghost" type="button" disabled title="Slot tidak bisa dihapus karena sudah memiliki order/proses booking."><i data-lucide="trash"></i> Hapus</button>
+                    @endif
+                </div>
+            </td>
+        </tr>@empty<tr><td colspan="8" style="text-align:center;padding:2rem;">Belum ada slot jadwal untuk filter ini.</td></tr>@endforelse
     </tbody></table><div style="margin-top:1rem;">{{ $slots->links() }}</div></div></div>
+    <script>
+        document.querySelector('[data-slot-check-all]')?.addEventListener('change', (event) => {
+            document.querySelectorAll('[data-slot-check]').forEach((checkbox) => {
+                checkbox.checked = event.target.checked;
+            });
+        });
+    </script>
 @endsection

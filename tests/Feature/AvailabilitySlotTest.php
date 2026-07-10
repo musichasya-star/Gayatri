@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AiPersona;
 use App\Models\AvailabilitySlot;
+use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\Service;
@@ -113,6 +114,80 @@ class AvailabilitySlotTest extends TestCase
             ->assertSessionHasErrors('booking');
     }
 
+    public function test_admin_can_delete_empty_availability_slot(): void
+    {
+        [$admin, , $branch, $service, $therapist] = $this->seedData();
+        $slot = $this->slot($branch, $service, $therapist, now()->addDay()->toDateString(), '13:00:00');
+
+        $this->actingAs($admin)
+            ->get(route('admin.availability.index', ['date' => $slot->slot_date->toDateString()]))
+            ->assertOk()
+            ->assertSee('Hapus');
+
+        $this->actingAs($admin)
+            ->delete(route('admin.availability.destroy', $slot))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('availability_slots', ['id' => $slot->id]);
+    }
+
+    public function test_admin_cannot_delete_slot_with_active_booking(): void
+    {
+        [$admin, $customer, $branch, $service, $therapist] = $this->seedData();
+        $slot = $this->slot($branch, $service, $therapist, now()->addDay()->toDateString(), '14:00:00', ['booked_count' => 1, 'status' => AvailabilitySlotStatus::FULL]);
+        Booking::create([
+            'customer_id' => $customer->id,
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'availability_slot_id' => $slot->id,
+            'booking_code' => 'BK-SLOT-LOCK',
+            'booking_date' => $slot->slot_date->toDateString(),
+            'start_time' => '14:00:00',
+            'end_time' => '15:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => PaymentStatus::UNPAID,
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.availability.destroy', $slot))
+            ->assertSessionHasErrors('slot');
+
+        $this->assertDatabaseHas('availability_slots', ['id' => $slot->id]);
+    }
+
+    public function test_admin_can_bulk_delete_only_unbooked_slots(): void
+    {
+        [$admin, $customer, $branch, $service, $therapist] = $this->seedData();
+        $freeSlot = $this->slot($branch, $service, $therapist, now()->addDay()->toDateString(), '15:00:00');
+        $secondFreeSlot = $this->slot($branch, $service, $therapist, now()->addDay()->toDateString(), '16:00:00');
+        $bookedSlot = $this->slot($branch, $service, $therapist, now()->addDay()->toDateString(), '17:00:00', ['booked_count' => 1, 'status' => AvailabilitySlotStatus::FULL]);
+        Booking::create([
+            'customer_id' => $customer->id,
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'availability_slot_id' => $bookedSlot->id,
+            'booking_code' => 'BK-SLOT-BULK',
+            'booking_date' => $bookedSlot->slot_date->toDateString(),
+            'start_time' => '17:00:00',
+            'end_time' => '18:00:00',
+            'status' => BookingStatus::PENDING,
+            'payment_status' => PaymentStatus::UNPAID,
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.availability.bulk-destroy'), [
+                'slot_ids' => [$freeSlot->id, $bookedSlot->id, $secondFreeSlot->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseMissing('availability_slots', ['id' => $freeSlot->id]);
+        $this->assertDatabaseMissing('availability_slots', ['id' => $secondFreeSlot->id]);
+        $this->assertDatabaseHas('availability_slots', ['id' => $bookedSlot->id]);
+    }
+
     public function test_ai_answers_schedule_from_real_availability_slots(): void
     {
         [, , $branch, $service, $therapist] = $this->seedData();
@@ -164,5 +239,20 @@ class AvailabilitySlotTest extends TestCase
         $therapist = Therapist::create(['branch_id' => $branch->id, 'name' => 'Terapis Slot', 'status' => 'active']);
 
         return [$admin, $customer, $branch, $service, $therapist];
+    }
+
+    private function slot(Branch $branch, Service $service, Therapist $therapist, string $date, string $startTime, array $overrides = []): AvailabilitySlot
+    {
+        return AvailabilitySlot::create(array_replace([
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'slot_date' => $date,
+            'start_time' => $startTime,
+            'end_time' => date('H:i:s', strtotime($startTime) + 3600),
+            'capacity' => 1,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ], $overrides));
     }
 }

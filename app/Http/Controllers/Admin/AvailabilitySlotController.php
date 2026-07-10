@@ -9,6 +9,7 @@ use App\Models\Service;
 use App\Models\Therapist;
 use App\Services\CRM\AuditLogService;
 use App\Support\AvailabilitySlotStatus;
+use App\Support\BookingStatus;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class AvailabilitySlotController extends Controller
         $date = $request->date('date')?->toDateString() ?? now()->toDateString();
         $slots = AvailabilitySlot::query()
             ->with(['branch', 'service', 'therapist'])
+            ->withCount(['bookings as active_bookings_count' => fn ($query) => $query->whereIn('status', BookingStatus::active())])
             ->whereDate('slot_date', $date)
             ->when($request->filled('branch_id'), fn ($query) => $query->where('branch_id', $request->integer('branch_id')))
             ->when($request->filled('service_id'), fn ($query) => $query->where('service_id', $request->integer('service_id')))
@@ -66,6 +68,58 @@ class AvailabilitySlotController extends Controller
         $this->auditLogService->log($request->user(), 'availability.block', $slot, $request, $old, $slot->toArray(), 'Availability slot blocked');
 
         return back()->with('status', 'Slot berhasil diblokir.');
+    }
+
+    public function destroy(Request $request, AvailabilitySlot $slot): RedirectResponse
+    {
+        if (! $slot->canBeDeleted()) {
+            return back()->withErrors(['slot' => 'Slot jadwal tidak bisa dihapus karena sudah memiliki order/proses booking.']);
+        }
+
+        $old = $slot->toArray();
+        $slot->delete();
+        $this->auditLogService->log($request->user(), 'availability.delete', null, $request, $old, [], 'Availability slot deleted');
+
+        return back()->with('status', 'Slot jadwal berhasil dihapus.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'slot_ids' => ['required', 'array', 'min:1'],
+            'slot_ids.*' => ['integer', 'exists:availability_slots,id'],
+        ], [
+            'slot_ids.required' => 'Pilih minimal satu slot jadwal yang ingin dihapus.',
+            'slot_ids.min' => 'Pilih minimal satu slot jadwal yang ingin dihapus.',
+        ]);
+
+        $slots = AvailabilitySlot::query()
+            ->withCount(['bookings as active_bookings_count' => fn ($query) => $query->whereIn('status', BookingStatus::active())])
+            ->whereIn('id', $data['slot_ids'])
+            ->get();
+
+        $deleted = 0;
+        $skipped = 0;
+
+        foreach ($slots as $slot) {
+            if (! $slot->canBeDeleted()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $old = $slot->toArray();
+            $slot->delete();
+            $deleted++;
+            $this->auditLogService->log($request->user(), 'availability.bulk_delete', null, $request, $old, [], 'Availability slot bulk deleted');
+        }
+
+        $message = "{$deleted} slot jadwal berhasil dihapus.";
+        if ($skipped > 0) {
+            $message .= " {$skipped} slot dilewati karena sudah memiliki order/proses booking.";
+        }
+
+        return back()->with('status', $message);
     }
 
     public function bulkGenerate(Request $request): RedirectResponse

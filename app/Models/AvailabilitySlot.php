@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\AvailabilitySlotStatus;
+use App\Support\BookingStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -54,9 +55,24 @@ class AvailabilitySlot extends Model
         return $this->hasMany(Booking::class);
     }
 
+    public function activeBookings(): HasMany
+    {
+        return $this->bookings()->whereIn('status', BookingStatus::active());
+    }
+
     public function isBookable(): bool
     {
         return $this->status === AvailabilitySlotStatus::AVAILABLE
             && $this->booked_count < $this->capacity;
+    }
+
+    public function canBeDeleted(): bool
+    {
+        $activeBookingsCount = $this->getAttribute('active_bookings_count');
+        $hasActiveBookings = $activeBookingsCount !== null
+            ? (int) $activeBookingsCount > 0
+            : $this->activeBookings()->exists();
+
+        return (int) $this->booked_count <= 0 && ! $hasActiveBookings;
     }
 }
