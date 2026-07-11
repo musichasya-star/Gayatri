@@ -72,6 +72,24 @@ class ConversationFlowTest extends TestCase
         $this->assertSame('active', ConversationFlow::latest('id')->first()->status);
     }
 
+    public function test_service_choice_phrase_starts_booking_flow_with_selected_service(): void
+    {
+        [$customer, $conversation] = $this->conversation('628177700059');
+        $service = $this->service();
+        $flow = app(ConversationFlowService::class);
+
+        $reply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya ingin baby spa'));
+
+        $activeFlow = ConversationFlow::latest('id')->first();
+
+        $this->assertStringContainsString('layanan Baby Spa Premium saya catat', $reply['reply']);
+        $this->assertStringContainsString('atas nama siapa', $reply['reply']);
+        $this->assertStringNotContainsString('data booking sebelumnya', strtolower($reply['reply']));
+        $this->assertSame('ask_name', $activeFlow->step);
+        $this->assertSame($service->id, $activeFlow->payload['service_id']);
+        $this->assertSame('Baby Spa Premium', $activeFlow->payload['service_name']);
+    }
+
     public function test_booking_flow_answers_questions_without_treating_them_as_form_data(): void
     {
         [$customer, $conversation] = $this->conversation('628177700006');

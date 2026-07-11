@@ -125,7 +125,7 @@ class ConversationFlowService
                 'intent' => 'booking_new',
                 'step' => 'ask_name',
                 'status' => 'active',
-                'payload' => [],
+                'payload' => $this->initialBookingPayloadFromText($text),
                 'attempts' => [],
             ]);
         }
@@ -143,6 +143,12 @@ class ConversationFlowService
                 ."\nLayanan: ".($payload['service_name'] ?? '-')
                 ."\nJadwal saat ini: ".($payload['current_booking_date'] ?? '-').' '.substr((string) ($payload['current_start_time'] ?? ''), 0, 5)
                 ."\n\nTanggal baru yang Bunda inginkan kapan? Contoh: hari ini, besok, lusa, atau 28 Juni.");
+        }
+
+        $payload = $flow->payload ?? [];
+
+        if (! empty($payload['service_name'])) {
+            return $this->reply('Baik Bunda, layanan '.$payload['service_name'].' saya catat. Saya bantu buat reservasi baru ya. Boleh saya catat atas nama siapa?');
         }
 
         return $this->reply('Baik Bunda, saya bantu buat reservasi baru ya. Boleh saya catat atas nama siapa?');
@@ -833,7 +839,8 @@ class ConversationFlowService
 
         return Str::contains($normalizedText, $serviceName)
             || ($baseServiceName !== '' && Str::contains($normalizedText, $baseServiceName))
-            || ($categoryText !== '' && Str::contains($normalizedText, $categoryText));
+            || ($categoryText !== '' && Str::contains($normalizedText, $categoryText))
+            || $this->serviceKeywordMatches($normalizedText, $baseServiceName);
     }
 
     private function baseServiceName(string $normalizedServiceName): string
@@ -841,6 +848,22 @@ class ConversationFlowService
         $baseName = preg_replace('/\s*[\(\-].*$/', '', $normalizedServiceName);
 
         return Str::of($baseName ?: $normalizedServiceName)->squish()->toString();
+    }
+
+    private function serviceKeywordMatches(string $normalizedText, string $baseServiceName): bool
+    {
+        $words = collect(explode(' ', $baseServiceName))
+            ->map(fn (string $word) => trim($word))
+            ->filter(fn (string $word) => strlen($word) >= 3)
+            ->values();
+
+        if ($words->count() < 2) {
+            return false;
+        }
+
+        $matched = $words->filter(fn (string $word) => Str::contains($normalizedText, $word))->count();
+
+        return $matched >= 2;
     }
 
     private function activeAddOnsForService(int $serviceId)
@@ -1179,7 +1202,31 @@ class ConversationFlowService
 
     private function isNewBookingIntent(string $text): bool
     {
-        return Str::contains($text, ['booking baru', 'reservasi baru', 'tambah booking', 'tambah reservasi', 'mau booking', 'ingin booking', 'ingin reservasi', 'buat booking', 'buat reservasi', 'mau reservasi', 'pesan baby spa', 'pesan treatment', 'pesan layanan', 'mau pesan', 'ingin pesan']);
+        if (Str::contains($text, ['booking baru', 'reservasi baru', 'tambah booking', 'tambah reservasi', 'mau booking', 'ingin booking', 'ingin reservasi', 'buat booking', 'buat reservasi', 'mau reservasi', 'pesan baby spa', 'pesan treatment', 'pesan layanan', 'mau pesan', 'ingin pesan'])) {
+            return true;
+        }
+
+        if (Str::contains($text, ['tanya', 'info', 'jelaskan', 'apa itu', 'berapa', 'harga', 'biaya', 'jadwal', 'ready'])) {
+            return false;
+        }
+
+        return Str::contains($text, ['mau', 'ingin', 'pilih', 'ambil']) && $this->isServiceLike($text);
+    }
+
+    private function initialBookingPayloadFromText(string $text): array
+    {
+        $service = $this->serviceFromText($text);
+
+        if (! $service) {
+            return [];
+        }
+
+        return [
+            'service_id' => $service->id,
+            'service_name' => $service->name,
+            'addons' => [],
+            'addon_names' => [],
+        ];
     }
 
     private function isRescheduleIntent(string $text): bool

@@ -341,9 +341,15 @@ class AiService
     {
         $name = Str::of($serviceName)->lower()->squish()->toString();
         $baseName = Str::of(preg_replace('/\s*[\(\-].*$/', '', $name))->squish()->toString();
+        $words = collect(explode(' ', $baseName))
+            ->map(fn (string $word) => trim($word))
+            ->filter(fn (string $word) => strlen($word) >= 3)
+            ->values();
+        $matchedWords = $words->filter(fn (string $word) => Str::contains($text, $word))->count();
 
         return Str::contains($text, $name)
-            || ($baseName !== '' && Str::contains($text, $baseName));
+            || ($baseName !== '' && Str::contains($text, $baseName))
+            || ($words->count() >= 2 && $matchedWords >= 2);
     }
 
     private function isAvailabilityInquiry(string $text): bool
