@@ -203,6 +203,13 @@ class CustomerController extends Controller
         return redirect()->route('admin.customers.index')->with('status', 'Customer berhasil diarsipkan.');
     }
 
+    public function destroy(Request $request, Customer $customer): RedirectResponse
+    {
+        $this->customerService->deleteWithRelations($customer, $request->user(), $request);
+
+        return redirect()->route('admin.customers.index')->with('status', 'Customer dan semua data terkait berhasil dihapus.');
+    }
+
     private function validatedData(CustomerRequest $request): array
     {
         $data = $request->validated();

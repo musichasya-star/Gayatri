@@ -3,14 +3,31 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\AiAutomationApproval;
+use App\Models\AiAutomationLog;
+use App\Models\AiExtractedData;
+use App\Models\AiLog;
+use App\Models\AvailabilitySlot;
+use App\Models\Booking;
 use App\Models\Branch;
+use App\Models\Campaign;
+use App\Models\CampaignRecipient;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\Feedback;
+use App\Models\Followup;
+use App\Models\Message;
+use App\Models\Reminder;
 use App\Models\Service;
 use App\Models\Therapist;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Support\AvailabilitySlotStatus;
+use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
+use App\Support\PaymentStatus;
+use App\Support\ReminderStatus;
+use App\Support\CampaignStatus;
 use App\Support\UserRole;
 use App\Support\UserStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -312,5 +329,142 @@ CSV;
         $this->assertDatabaseHas('audit_logs', ['action' => 'service.archived', 'auditable_type' => Service::class, 'auditable_id' => $service->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'therapist.archived', 'auditable_type' => Therapist::class, 'auditable_id' => $therapist->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'customer.archived', 'auditable_type' => Customer::class, 'auditable_id' => $customer->id]);
+    }
+
+    public function test_admin_can_delete_customer_with_related_module_data(): void
+    {
+        $admin = User::factory()->create([
+            'role' => UserRole::ADMIN,
+            'status' => UserStatus::ACTIVE,
+        ]);
+        $branch = Branch::create(['name' => 'Cabang Delete', 'code' => 'DEL', 'status' => UserStatus::ACTIVE]);
+        $service = Service::create(['branch_id' => $branch->id, 'name' => 'Baby Spa Delete', 'duration_minutes' => 60, 'price' => 250000, 'is_active' => true]);
+        $therapist = Therapist::create(['branch_id' => $branch->id, 'name' => 'Terapis Delete', 'status' => UserStatus::ACTIVE]);
+        $customer = Customer::create([
+            'branch_id' => $branch->id,
+            'name' => 'Bunda Delete',
+            'phone' => '081299900001',
+            'whatsapp_number' => '6281299900001',
+            'status' => CustomerStatus::ACTIVE,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'delete-session', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '6281299900001@c.us',
+            'channel' => 'whatsapp',
+            'status' => 'open',
+            'ai_enabled' => true,
+        ]);
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'Saya mau booking',
+            'sent_at' => now(),
+        ]);
+        $slot = AvailabilitySlot::create([
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'slot_date' => now()->addDay()->toDateString(),
+            'start_time' => '10:00:00',
+            'end_time' => '11:00:00',
+            'capacity' => 1,
+            'booked_count' => 1,
+            'status' => AvailabilitySlotStatus::FULL,
+        ]);
+        $booking = Booking::create([
+            'customer_id' => $customer->id,
+            'branch_id' => $branch->id,
+            'service_id' => $service->id,
+            'therapist_id' => $therapist->id,
+            'conversation_id' => $conversation->id,
+            'availability_slot_id' => $slot->id,
+            'booking_code' => 'BK-CUST-DELETE',
+            'booking_date' => $slot->slot_date->toDateString(),
+            'start_time' => '10:00:00',
+            'end_time' => '11:00:00',
+            'status' => BookingStatus::CONFIRMED,
+            'payment_status' => PaymentStatus::UNPAID,
+        ]);
+        $campaign = Campaign::create([
+            'name' => 'Campaign Delete',
+            'message_template' => 'Halo',
+            'status' => CampaignStatus::DRAFT,
+        ]);
+        CampaignRecipient::create(['campaign_id' => $campaign->id, 'customer_id' => $customer->id, 'booking_id' => $booking->id]);
+        Reminder::create([
+            'booking_id' => $booking->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'type' => 'h1',
+            'status' => ReminderStatus::PENDING,
+            'scheduled_at' => now()->addHour(),
+        ]);
+        Followup::create(['customer_id' => $customer->id, 'conversation_id' => $conversation->id, 'title' => 'Follow-up delete', 'status' => 'open', 'priority' => 'normal']);
+        Feedback::create(['customer_id' => $customer->id, 'booking_id' => $booking->id, 'rating' => 5, 'status' => 'received']);
+        AiLog::create(['conversation_id' => $conversation->id, 'message_id' => $message->id, 'customer_id' => $customer->id, 'prompt' => 'Q', 'response' => 'A', 'confidence' => 0.9, 'status' => 'success']);
+        $extracted = AiExtractedData::create([
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'customer_id' => $customer->id,
+            'intent' => 'booking_request',
+            'confidence_score' => 0.9,
+            'status' => 'extracted',
+        ]);
+        $approval = AiAutomationApproval::create([
+            'ai_extracted_data_id' => $extracted->id,
+            'customer_id' => $customer->id,
+            'conversation_id' => $conversation->id,
+            'target_entity' => 'booking',
+            'action' => 'create_booking_draft',
+            'mode' => 'need_confirmation',
+            'proposed_data' => ['booking' => ['booking_id' => $booking->id]],
+            'status' => 'pending',
+        ]);
+        AiAutomationLog::create([
+            'ai_extracted_data_id' => $extracted->id,
+            'ai_automation_approval_id' => $approval->id,
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'customer_id' => $customer->id,
+            'target_entity' => 'booking',
+            'action' => 'create_booking_draft',
+            'mode' => 'need_confirmation',
+            'status' => 'pending_approval',
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.customers.index'))
+            ->assertOk()
+            ->assertSee('Hapus');
+
+        $this->actingAs($admin)
+            ->delete(route('admin.customers.destroy', $customer))
+            ->assertRedirect(route('admin.customers.index'))
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseMissing('customers', ['id' => $customer->id]);
+        $this->assertDatabaseMissing('conversations', ['id' => $conversation->id]);
+        $this->assertDatabaseMissing('messages', ['id' => $message->id]);
+        $this->assertDatabaseMissing('bookings', ['id' => $booking->id]);
+        $this->assertDatabaseMissing('reminders', ['customer_id' => $customer->id]);
+        $this->assertDatabaseMissing('followups', ['customer_id' => $customer->id]);
+        $this->assertDatabaseMissing('campaign_recipients', ['customer_id' => $customer->id]);
+        $this->assertDatabaseMissing('feedback', ['customer_id' => $customer->id]);
+        $this->assertDatabaseMissing('ai_logs', ['customer_id' => $customer->id]);
+        $this->assertDatabaseMissing('ai_extracted_data', ['id' => $extracted->id]);
+        $this->assertDatabaseMissing('ai_automation_approvals', ['id' => $approval->id]);
+        $this->assertDatabaseMissing('ai_automation_logs', ['customer_id' => $customer->id]);
+
+        $this->assertDatabaseHas('availability_slots', [
+            'id' => $slot->id,
+            'booked_count' => 0,
+            'status' => AvailabilitySlotStatus::AVAILABLE,
+        ]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'customer.deleted']);
     }
 }

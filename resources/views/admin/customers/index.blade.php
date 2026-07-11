@@ -88,6 +88,11 @@
                                             <button class="button button-ghost" type="submit">Arsipkan</button>
                                         </form>
                                     @endif
+                                    <form method="POST" action="{{ route('admin.customers.destroy', $customer) }}" onsubmit="return confirm('Hapus customer {{ $customer->name }} beserta history chat, booking, follow-up, reminder, feedback, campaign recipient, dan data AI terkait? Tindakan ini tidak bisa dibatalkan.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="button button-ghost" type="submit"><i data-lucide="trash"></i> Hapus</button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

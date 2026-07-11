@@ -69,6 +69,7 @@ Route::prefix('admin')
             Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
             Route::put('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
             Route::post('/customers/{customer}/archive', [CustomerController::class, 'archive'])->name('customers.archive');
+            Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
         });
 
         Route::middleware('role:owner,manager,admin')->group(function () {
