@@ -47,6 +47,31 @@ class ConversationFlowTest extends TestCase
         $this->assertSame('cancelled', ConversationFlow::latest('id')->first()->status);
     }
 
+    public function test_reservation_intent_and_english_cancel_restart_clean_booking_flow(): void
+    {
+        [$customer, $conversation] = $this->conversation('628177700058');
+        $flow = app(ConversationFlowService::class);
+
+        $reply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya ingin reservasi'));
+
+        $this->assertStringContainsString('saya bantu buat reservasi baru', $reply['reply']);
+        $this->assertStringContainsString('atas nama siapa', $reply['reply']);
+        $this->assertStringNotContainsString('data booking sebelumnya', strtolower($reply['reply']));
+
+        $cancelReply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'cancel'));
+
+        $this->assertStringContainsString('tidak saya lanjutkan', $cancelReply['reply']);
+        $this->assertSame('cancelled', ConversationFlow::latest('id')->first()->status);
+
+        $newReply = $flow->handle($conversation, $this->incoming($conversation, $customer, 'saya ingin reservasi'));
+
+        $this->assertStringContainsString('saya bantu buat reservasi baru', $newReply['reply']);
+        $this->assertStringContainsString('atas nama siapa', $newReply['reply']);
+        $this->assertStringNotContainsString('data booking sebelumnya', strtolower($newReply['reply']));
+        $this->assertSame(2, ConversationFlow::where('conversation_id', $conversation->id)->count());
+        $this->assertSame('active', ConversationFlow::latest('id')->first()->status);
+    }
+
     public function test_booking_flow_answers_questions_without_treating_them_as_form_data(): void
     {
         [$customer, $conversation] = $this->conversation('628177700006');

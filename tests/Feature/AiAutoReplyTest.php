@@ -1510,6 +1510,71 @@ class AiAutoReplyTest extends TestCase
         $this->assertStringNotContainsString('Tinggal lengkapi', $result['reply']);
     }
 
+    public function test_english_cancel_after_incomplete_booking_context_cancels_instead_of_fallback(): void
+    {
+        config()->set('ai.provider', 'local');
+        $this->seedAiSetup();
+
+        $customer = Customer::create([
+            'name' => 'Bunda Cancel English',
+            'phone' => '628123450024',
+            'whatsapp_number' => '628123450024',
+            'status' => CustomerStatus::LEAD,
+        ]);
+        $session = WhatsAppSession::create(['session_name' => 'default', 'status' => 'working']);
+        $conversation = Conversation::create([
+            'customer_id' => $customer->id,
+            'whatsapp_session_id' => $session->id,
+            'wa_chat_id' => '628123450024@c.us',
+            'channel' => 'whatsapp',
+            'status' => ConversationStatus::OPEN,
+            'ai_enabled' => true,
+        ]);
+        Service::create([
+            'name' => 'Baby Spa Premium',
+            'category' => 'baby-spa',
+            'duration_minutes' => 60,
+            'price' => 250000,
+            'is_active' => true,
+        ]);
+
+        app(AiDataExtractionService::class)->extractFromMessage(Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'saya mau booking baby spa',
+            'sent_at' => now(),
+        ]));
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'outgoing',
+            'sender_type' => 'ai',
+            'message_type' => 'text',
+            'content' => 'Baik Bunda, data booking sebelumnya sudah saya catat. Tinggal lengkapi: nama Bunda, alamat lengkap, hari atau tanggal kunjungan, perkiraan jam.',
+            'sent_at' => now(),
+        ]);
+
+        $cancel = Message::create([
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customer->id,
+            'direction' => 'incoming',
+            'sender_type' => 'customer',
+            'message_type' => 'text',
+            'content' => 'cancel',
+            'sent_at' => now(),
+        ]);
+
+        app(AiDataExtractionService::class)->extractFromMessage($cancel);
+        $result = app(AiService::class)->generateReply($conversation, $cancel);
+
+        $this->assertSame('success', $result['status']);
+        $this->assertStringContainsString('proses reservasi tidak saya lanjutkan', strtolower($result['reply']));
+        $this->assertStringNotContainsString('belum bisa memastikan', strtolower($result['reply']));
+    }
+
     public function test_booking_lookup_includes_pending_confirmation_reservation(): void
     {
         config()->set('ai.provider', 'local');

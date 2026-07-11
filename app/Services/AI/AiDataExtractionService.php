@@ -573,7 +573,7 @@ class AiDataExtractionService
 
     private function isRejection(string $text): bool
     {
-        return in_array(trim($text), ['tidak', 'tidak jadi', 'batal', 'jangan'], true);
+        return in_array(trim($text), ['tidak', 'tidak jadi', 'batal', 'cancel', 'jangan'], true);
     }
 
     private function isThanks(string $text): bool

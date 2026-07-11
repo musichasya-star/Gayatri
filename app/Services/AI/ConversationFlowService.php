@@ -1179,7 +1179,7 @@ class ConversationFlowService
 
     private function isNewBookingIntent(string $text): bool
     {
-        return Str::contains($text, ['booking baru', 'reservasi baru', 'tambah booking', 'tambah reservasi', 'mau booking', 'ingin booking', 'buat booking', 'buat reservasi', 'mau reservasi', 'pesan baby spa', 'pesan treatment', 'pesan layanan', 'mau pesan', 'ingin pesan']);
+        return Str::contains($text, ['booking baru', 'reservasi baru', 'tambah booking', 'tambah reservasi', 'mau booking', 'ingin booking', 'ingin reservasi', 'buat booking', 'buat reservasi', 'mau reservasi', 'pesan baby spa', 'pesan treatment', 'pesan layanan', 'mau pesan', 'ingin pesan']);
     }
 
     private function isRescheduleIntent(string $text): bool

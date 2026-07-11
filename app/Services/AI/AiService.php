@@ -948,7 +948,7 @@ class AiService
 
     private function isRejection(string $message): bool
     {
-        return in_array(trim(Str::lower($message)), ['tidak', 'tidak jadi', 'batal', 'jangan'], true);
+        return in_array(trim(Str::lower($message)), ['tidak', 'tidak jadi', 'batal', 'cancel', 'jangan'], true);
     }
 
     private function greetingReply(string $message): string
