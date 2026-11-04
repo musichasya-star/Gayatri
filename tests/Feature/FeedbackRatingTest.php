@@ -38,7 +38,7 @@ class FeedbackRatingTest extends TestCase
                 'booking_date' => now()->addDay()->toDateString(),
                 'start_time' => '10:00',
                 'status' => BookingStatus::COMPLETED,
-                'payment_status' => PaymentStatus::PAID,
+                'payment_status' => PaymentStatus::UNPAID,
             ])
             ->assertRedirect(route('admin.bookings.index'));
 

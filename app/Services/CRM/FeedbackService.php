@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\Feedback;
 use App\Models\Followup;
 use App\Models\Message;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class FeedbackService
@@ -53,6 +54,17 @@ class FeedbackService
         if (! $feedback) {
             return null;
         }
+        $explicitRating = preg_match('/^\s*(rating|nilai|bintang)\b/iu', (string) $message->content);
+        if (! $explicitRating) {
+            if (preg_match('/\b(sewa|rental|laundry|booking|hari|kg|jam|tanggal|alat)\b/iu', (string) $message->content)) {
+                return null;
+            }
+            if (DB::table('ai_conversation_contexts')->where('conversation_id', $message->conversation_id)
+                ->whereIn('menu', ['main', 'domain', 'clarify', 'lookup', 'offer_catalog', 'offer_admin'])->where('expires_at', '>', now())
+                ->where('control_revision', (int) $message->conversation?->ai_control_revision)->exists()) {
+                return null;
+            }
+        }
 
         $rating = $this->extractRating((string) $message->content);
         if (! $rating) {
@@ -87,7 +99,7 @@ class FeedbackService
 
     private function extractRating(string $content): ?int
     {
-        if (preg_match('/\b([1-5])\b/', $content, $matches)) {
+        if (preg_match('/^\s*(?:(?:rating|nilai|bintang)\s*[:=]?\s*)?([1-5])(?:\b|$)/iu', $content, $matches)) {
             return (int) $matches[1];
         }
 

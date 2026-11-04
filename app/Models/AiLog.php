@@ -23,6 +23,7 @@ class AiLog extends Model
         'fallback_reason',
         'sources',
         'meta',
+        'domain', 'intent', 'reason_code', 'execution_state', 'outgoing_message_id',
     ];
 
     protected function casts(): array
@@ -52,6 +53,11 @@ class AiLog extends Model
     public function persona(): BelongsTo
     {
         return $this->belongsTo(AiPersona::class, 'persona_id');
+    }
+
+    public function outgoingMessage(): BelongsTo
+    {
+        return $this->belongsTo(Message::class, 'outgoing_message_id');
     }
 
     public function knowledgeBase(): BelongsTo

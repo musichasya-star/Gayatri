@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\AppSettingService;
 use App\Services\CRM\AuditLogService;
+use App\Services\WhatsApp\GatewayConfig;
 use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\WhatsAppGateway;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +39,15 @@ class SettingController extends Controller
             'aiProviders' => self::AI_PROVIDERS,
             'aiModels' => self::AI_MODELS,
             'settings' => $this->currentSettings(),
+            'gatewayProvider' => GatewayConfig::provider(),
+            'gatewaySettings' => collect(['baileys', 'waha'])->mapWithKeys(fn ($provider) => [$provider => [
+                'base_url' => config($provider.'.base_url'),
+                'default_session' => config($provider.'.default_session'),
+                'webhook_base_url' => config($provider.'.webhook_base_url'),
+                'timeout' => config($provider.'.timeout', 30),
+                'api_key_set' => filled(config($provider.'.api_key')),
+                'webhook_secret_set' => filled(config($provider.'.webhook_secret')),
+            ]])->all(),
         ]);
     }
 
@@ -51,7 +62,7 @@ class SettingController extends Controller
         ]);
 
         if (! in_array($data['model'], self::AI_MODELS[$data['provider']] ?? [], true)) {
-            return back()->withErrors(['model' => 'Model AI tidak sesuai dengan provider yang dipilih.'])->withInput();
+            return back()->withErrors(['model' => 'Model AI tidak sesuai dengan provider yang dipilih.'])->withInput($request->except(['api_key', 'webhook_secret']));
         }
 
         $this->settings->setMany([
@@ -79,60 +90,89 @@ class SettingController extends Controller
 
     public function updateWaha(Request $request): RedirectResponse
     {
+        $request->merge(['gateway_provider' => 'waha']);
+
+        return $this->updateWhatsapp($request);
+    }
+
+    public function updateWhatsapp(Request $request): RedirectResponse
+    {
         $data = $request->validate([
+            'gateway_provider' => ['required', Rule::in(['baileys', 'waha'])],
             'base_url' => ['required', 'url', 'max:255'],
             'api_key' => ['nullable', 'string', 'max:500'],
-            'default_session' => ['required', 'string', 'max:100'],
+            'default_session' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_-]+$/'],
             'webhook_base_url' => ['nullable', 'url', 'max:255'],
             'webhook_secret' => ['nullable', 'string', 'max:255'],
             'timeout' => ['required', 'integer', 'min:3', 'max:120'],
         ]);
 
+        $provider = $data['gateway_provider'];
+        if ($provider === 'baileys' && (blank($data['api_key'] ?? null) && blank($this->settings->get('baileys.api_key', config('baileys.api_key')))
+            || blank($data['webhook_secret'] ?? null) && blank($this->settings->get('baileys.webhook_secret', config('baileys.webhook_secret'))))) {
+            return back()->withErrors(['whatsapp' => 'API key dan webhook secret Baileys wajib dikonfigurasi.']);
+        }
+
         $this->settings->setMany([
-            'waha.base_url' => rtrim($data['base_url'], '/'),
-            'waha.default_session' => $data['default_session'],
-            'waha.timeout' => $data['timeout'],
+            'whatsapp.provider' => $provider,
+            $provider.'.base_url' => rtrim($data['base_url'], '/'),
+            $provider.'.default_session' => $data['default_session'],
+            $provider.'.timeout' => $data['timeout'],
         ]);
 
-        $webhookBaseUrl = trim((string) $data['webhook_base_url']);
-        $this->settings->set('waha.webhook_base_url', $webhookBaseUrl === '' ? null : rtrim($webhookBaseUrl, '/'));
+        $webhookBaseUrl = trim((string) ($data['webhook_base_url'] ?? ''));
+        $this->settings->set($provider.'.webhook_base_url', $webhookBaseUrl === '' ? null : rtrim($webhookBaseUrl, '/'));
 
         if (filled($data['api_key'] ?? null)) {
-            $this->settings->set('waha.api_key', $data['api_key']);
+            $this->settings->set($provider.'.api_key', $data['api_key']);
         }
 
         if (filled($data['webhook_secret'] ?? null)) {
-            $this->settings->set('waha.webhook_secret', $data['webhook_secret']);
+            $this->settings->set($provider.'.webhook_secret', $data['webhook_secret']);
         }
 
         $this->settings->applyToConfig();
-        $this->auditLogService->log($request->user(), 'settings.waha.update', null, $request, [], [
+        $this->auditLogService->log($request->user(), 'settings.'.$provider.'.update', null, $request, [], [
             'base_url' => rtrim($data['base_url'], '/'),
             'default_session' => $data['default_session'],
             'timeout' => $data['timeout'],
             'webhook_base_url_set' => $webhookBaseUrl !== '',
             'api_key_changed' => filled($data['api_key'] ?? null),
             'webhook_secret_changed' => filled($data['webhook_secret'] ?? null),
-        ], 'WAHA settings updated');
+        ], GatewayConfig::label().' settings updated');
 
-        return back()->with('status', 'Setting WAHA berhasil disimpan.');
+        return back()->with('status', 'Setting '.GatewayConfig::label().' berhasil disimpan. Restart queue worker setelah mengganti gateway.');
+    }
+
+    public function testWhatsapp(): RedirectResponse
+    {
+        $this->settings->applyToConfig();
+
+        return $this->testGateway(app(WhatsAppGateway::class), GatewayConfig::provider());
     }
 
     public function testWaha(WahaService $wahaService): RedirectResponse
     {
         $this->settings->applyToConfig();
 
+        return $this->testGateway($wahaService, 'waha');
+    }
+
+    private function testGateway(WhatsAppGateway $wahaService, string $provider): RedirectResponse
+    {
+        $label = $provider === 'baileys' ? 'Baileys' : 'WAHA';
+
         try {
             $sessions = $wahaService->listSessions();
         } catch (Throwable $exception) {
-            $this->auditLogService->log(request()->user(), 'settings.waha.test_failed', null, request(), [], ['error' => $exception->getMessage()], 'WAHA connection test failed');
+            $this->auditLogService->log(request()->user(), 'settings.'.$provider.'.test_failed', null, request(), [], ['error' => $exception->getMessage()], $label.' connection test failed');
 
-            return back()->withErrors(['waha' => 'Koneksi WAHA gagal: '.$exception->getMessage()]);
+            return back()->withErrors([$provider => 'Koneksi '.$label.' gagal: '.$exception->getMessage()]);
         }
 
-        $this->auditLogService->log(request()->user(), 'settings.waha.test_success', null, request(), [], ['sessions' => count($sessions)], 'WAHA connection test success');
+        $this->auditLogService->log(request()->user(), 'settings.'.$provider.'.test_success', null, request(), [], ['sessions' => count($sessions)], $label.' connection test success');
 
-        return back()->with('status', 'Koneksi WAHA berhasil. Sessions terdeteksi: '.count($sessions).'.');
+        return back()->with('status', 'Koneksi '.$label.' berhasil. Sessions terdeteksi: '.count($sessions).'.');
     }
 
     public function testAi(Request $request): RedirectResponse

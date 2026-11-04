@@ -8,7 +8,9 @@ use App\Models\Customer;
 use App\Models\Message;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Services\AI\AiInteractionPolicy;
 use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\WhatsAppMonitor;
 use App\Support\CustomerStatus;
 use App\Support\UserRole;
 use App\Support\UserStatus;
@@ -415,7 +417,11 @@ class WahaIntegrationTest extends TestCase
             'ai_enabled' => true,
         ]);
 
-        (new SendWhatsAppMessageJob($conversation->id, null, 'ai', 'Typing gagal tetap kirim'))->handle(app(WahaService::class));
+        $source = Message::create(['conversation_id' => $conversation->id, 'customer_id' => $customer->id,
+            'direction' => 'incoming', 'sender_type' => 'customer', 'message_type' => 'text', 'content' => 'Halo']);
+        $policy = app(AiInteractionPolicy::class);
+        $context = $policy->replyContext($conversation, $source, 'Typing gagal tetap kirim', $policy->snapshot());
+        (new SendWhatsAppMessageJob($conversation->id, null, 'ai', 'Typing gagal tetap kirim', null, null, null, $context))->handle(app(WahaService::class));
 
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
@@ -427,7 +433,7 @@ class WahaIntegrationTest extends TestCase
         ]);
     }
 
-    public function test_send_whatsapp_message_job_accepts_empty_success_response(): void
+    public function test_send_whatsapp_message_job_marks_empty_success_response_as_uncertain(): void
     {
         Http::fake([
             'http://waha.test/api/sendText' => Http::response('', 201),
@@ -454,7 +460,8 @@ class WahaIntegrationTest extends TestCase
             'direction' => 'outgoing',
             'sender_type' => 'admin',
             'content' => 'Test response kosong',
-            'failed_reason' => null,
+            'delivery_status' => 'unknown',
+            'sent_at' => null,
         ]);
     }
 
@@ -503,6 +510,7 @@ class WahaIntegrationTest extends TestCase
         Queue::fake();
         Http::fake([
             'http://waha.test/api/sendText' => Http::response(['message' => 'WAHA unavailable'], 500),
+            'http://waha.test/api/sessions' => Http::response([['name' => 'default', 'status' => 'WORKING']], 200),
         ]);
 
         $customer = Customer::create([
@@ -524,9 +532,10 @@ class WahaIntegrationTest extends TestCase
         $message = Message::where('content', 'Test gagal')->firstOrFail();
         $this->assertNotNull($message->failed_at);
         $this->assertNotNull($message->failed_reason);
+        $this->assertSame('unknown', $message->delivery_status);
 
         $this->actingAs($admin)
-            ->post(route('admin.inbox.messages.retry', $message))
+            ->post(route('admin.inbox.messages.retry', $message), ['fingerprint' => WhatsAppMonitor::fingerprint('message', $message), 'reason' => 'Chat sudah diperiksa dan pesan belum diterima.', 'confirmed_not_sent' => 1])
             ->assertRedirect(route('admin.inbox', ['conversation' => $conversation->id]));
 
         Queue::assertPushed(SendWhatsAppMessageJob::class);

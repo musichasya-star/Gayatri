@@ -22,10 +22,14 @@ use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiAutomationFoundationTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     public function test_extracts_booking_request_and_creates_pending_approval(): void

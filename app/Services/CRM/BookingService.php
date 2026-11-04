@@ -2,6 +2,7 @@
 
 namespace App\Services\CRM;
 
+use App\Jobs\SendHomeVisitAssignmentJob;
 use App\Jobs\SendWhatsAppMessageJob;
 use App\Models\AvailabilitySlot;
 use App\Models\Booking;
@@ -10,11 +11,14 @@ use App\Models\Conversation;
 use App\Models\Promo;
 use App\Models\Service;
 use App\Models\ServiceAddon;
+use App\Models\Therapist;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\PaymentStatus;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 class BookingService
@@ -26,10 +30,18 @@ class BookingService
 
     public function create(array $data, ?int $userId): Booking
     {
+        return DB::transaction(fn () => $this->createBooking($data, $userId));
+    }
+
+    private function createBooking(array $data, ?int $userId): Booking
+    {
         $service = Service::where('is_active', true)->find($data['service_id']);
 
         if (! $service) {
             throw new InvalidArgumentException('Layanan tidak aktif atau tidak ditemukan.');
+        }
+        if ($service->requiresManualBooking()) {
+            throw new InvalidArgumentException('Pilihan layanan/paket ini memerlukan konfirmasi admin mengenai durasi, harga, atau jadwal kunjungan. Pilih melalui katalog dan hubungi admin.');
         }
 
         $bookingDate = Carbon::parse($data['booking_date'])->startOfDay();
@@ -45,14 +57,14 @@ class BookingService
 
         $this->validateOperatingHours($startTime, $endTime);
 
-        if (! empty($data['therapist_id']) && $this->hasConflict((int) $data['therapist_id'], $bookingDate->toDateString(), $startTime->format('H:i:s'), $endTime->format('H:i:s'))) {
-            throw new InvalidArgumentException('Jadwal terapis bentrok dengan booking lain.');
-        }
-
         $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $slotEndTime->format('H:i:s'));
+        $visit = $this->visitAttributes($data, $service, $slot, $bookingDate, $startTime, $endTime);
+        if ($visit['service_mode'] === 'clinic') {
+            $visit['service_price_snapshot'] = $service->price;
+        }
         $promo = $this->validPromo($data['promo_id'] ?? null);
 
-        $booking = Booking::create([
+        $booking = Booking::create(array_merge([
             'customer_id' => $data['customer_id'],
             'branch_id' => $data['branch_id'] ?? $service->branch_id,
             'service_id' => $service->id,
@@ -67,11 +79,14 @@ class BookingService
             'end_time' => $endTime->format('H:i:s'),
             'status' => $data['status'] ?? BookingStatus::DRAFT,
             'payment_status' => $data['payment_status'] ?? PaymentStatus::UNPAID,
+            'finance_managed' => ($data['payment_status'] ?? PaymentStatus::UNPAID) === PaymentStatus::UNPAID,
+            'finance_opened_at' => ($data['payment_status'] ?? PaymentStatus::UNPAID) === PaymentStatus::UNPAID ? now() : null,
             'source' => $data['source'] ?? 'manual',
-            'promo_discount' => $this->discountAmount($promo, (float) $service->price),
+            'promo_discount' => $this->discountAmount($promo, (float) ($visit['service_price_snapshot'] ?? $service->price)),
             'notes' => $data['notes'] ?? null,
-        ]);
+        ], $visit));
         $this->syncBookingAddOns($booking, $selectedAddOns);
+        app(TherapistFeeService::class)->sync($booking, auth()->user(), request());
 
         if ($promo) {
             $promo->increment('used_count');
@@ -97,7 +112,30 @@ class BookingService
 
     public function update(Booking $booking, array $data): Booking
     {
+        $updated = DB::transaction(fn () => $this->updateBooking($booking, $data));
+
+        return $booking->setRawAttributes($updated->getAttributes(), true)->unsetRelations();
+    }
+
+    private function updateBooking(Booking $booking, array $data): Booking
+    {
+        $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+        $finance = app(BookingFinance::class);
+        $frozen = (int) $booking->legacy_credit_cents > 0 || $booking->payments()->whereNull('voided_at')->exists();
+        $oldFingerprint = $frozen ? $finance->fingerprint($booking) : null;
+        if ($booking->finance_managed && $data['payment_status'] !== $booking->payment_status) {
+            throw ValidationException::withMessages(['payment_status' => 'Status pembayaran mengikuti jurnal. Catat pembayaran/refund/koreksi melalui menu transaksi.']);
+        }
+        if ($booking->public_request_data && ! $booking->contact_verified_at && in_array($data['status'], ['confirmed', 'completed'], true)) {
+            throw ValidationException::withMessages(['booking' => 'Verifikasi kontak permintaan publik sebelum konfirmasi atau penyelesaian.']);
+        }
+        if (in_array($data['status'], ['cancelled', 'cancelled_by_user', 'no_show'], true) && $booking->finance_managed && $finance->figures($booking)['net'] > 0) {
+            throw ValidationException::withMessages(['booking' => 'Selesaikan pencatatan refund yang benar-benar dilakukan sebelum membatalkan booking berbayar.']);
+        }
         $service = Service::where('is_active', true)->find($data['service_id']);
+        if ($service?->requiresManualBooking()) {
+            throw new InvalidArgumentException('Pilihan layanan/paket ini memerlukan konfirmasi admin sebelum dijadwalkan.');
+        }
 
         if (! $service) {
             throw new InvalidArgumentException('Layanan tidak aktif atau tidak ditemukan.');
@@ -116,22 +154,26 @@ class BookingService
 
         $this->validateOperatingHours($startTime, $endTime);
 
-        if (! empty($data['therapist_id']) && $this->hasConflict((int) $data['therapist_id'], $bookingDate->toDateString(), $startTime->format('H:i:s'), $endTime->format('H:i:s'), $booking->id)) {
-            throw new InvalidArgumentException('Jadwal terapis bentrok dengan booking lain.');
-        }
-
         $oldPromoId = $booking->promo_id;
         $oldSlot = $booking->availabilitySlot;
         $promo = $this->validPromo($data['promo_id'] ?? null, $oldPromoId);
         $slot = $this->resolveSlot($data, $service->id, $bookingDate->toDateString(), $startTime->format('H:i:s'), $slotEndTime->format('H:i:s'), $booking);
+        $visit = $this->visitAttributes($data, $service, $slot, $bookingDate, $startTime, $endTime, $booking);
+        if ($visit['service_mode'] === 'clinic') {
+            $visit['service_price_snapshot'] = $booking->service_mode === 'clinic' && $booking->service_id === $service->id
+                ? $booking->service_price_snapshot : $service->price;
+        }
+        $assignmentChanged = (int) $booking->therapist_id !== (int) ($visit['therapist_id'] ?? 0) || $booking->visit_address !== ($visit['visit_address'] ?? null) || $booking->visit_landmark !== ($visit['visit_landmark'] ?? null) || $booking->visit_latitude != ($visit['visit_latitude'] ?? null) || $booking->visit_longitude != ($visit['visit_longitude'] ?? null) || (float) $booking->travel_fee !== (float) $visit['travel_fee'];
 
         $oldStatus = $booking->status;
+        $oldServiceMode = $booking->service_mode;
+        $oldVisitTherapist = $booking->service_mode === 'home' ? $booking->therapist_id : null;
         $oldBookingDate = $booking->booking_date?->toDateString();
         $oldStartTime = substr((string) $booking->start_time, 0, 5);
         $wasConfirmed = $oldStatus === BookingStatus::CONFIRMED;
         $wasCompleted = $oldStatus === BookingStatus::COMPLETED;
 
-        $booking->update([
+        $booking->update(array_merge([
             'customer_id' => $data['customer_id'],
             'branch_id' => $data['branch_id'] ?? $service->branch_id,
             'service_id' => $service->id,
@@ -143,13 +185,22 @@ class BookingService
             'end_time' => $endTime->format('H:i:s'),
             'status' => $data['status'],
             'payment_status' => $data['payment_status'],
-            'promo_discount' => $this->discountAmount($promo, (float) $service->price),
+            'promo_discount' => $booking->service_mode === 'home' && $visit['service_mode'] === 'home' && $oldPromoId === $promo?->id ? $booking->promo_discount : $this->discountAmount($promo, (float) ($visit['service_price_snapshot'] ?? $service->price)),
             'notes' => $data['notes'] ?? null,
-        ]);
+        ], $visit));
         $this->syncBookingAddOns($booking, $selectedAddOns);
 
+        if ($frozen && $oldFingerprint !== $finance->fingerprint($booking->refresh())) {
+            throw ValidationException::withMessages(['booking' => 'Pelanggan dan rincian tagihan dikunci setelah ada saldo awal/pembayaran. Tinjau refund atau koreksi pencatatan terlebih dahulu.']);
+        }
+        $booking->increment('finance_revision');
         $this->syncPromoUsage($oldPromoId, $promo?->id);
+        app(TherapistFeeService::class)->sync($booking, auth()->user(), request());
+        $booking->unsetRelation('therapist')->unsetRelation('customer')->unsetRelation('service')->unsetRelation('availabilitySlot');
         $this->syncSlotUsage($oldSlot, $slot, $booking);
+        if ($wasConfirmed && $oldVisitTherapist && ($booking->service_mode !== 'home' || (int) $booking->therapist_id !== (int) $oldVisitTherapist)) {
+            SendHomeVisitAssignmentJob::dispatch($booking->id, $booking->homeVisitRevision(), $oldVisitTherapist, true)->afterCommit();
+        }
 
         if (! $wasConfirmed && $booking->status === BookingStatus::CONFIRMED) {
             $this->reminderService->syncForConfirmedBooking($booking);
@@ -158,6 +209,12 @@ class BookingService
 
         $scheduleChanged = $oldBookingDate !== $booking->booking_date?->toDateString() || $oldStartTime !== substr((string) $booking->start_time, 0, 5);
         $sentConfirmationForStatusChange = ! $wasConfirmed && $booking->status === BookingStatus::CONFIRMED;
+        if ($booking->service_mode === 'home' && $booking->status === BookingStatus::CONFIRMED && $assignmentChanged && ! $scheduleChanged && ! $sentConfirmationForStatusChange) {
+            $this->sendConfirmation($booking);
+        }
+        if ($oldServiceMode === 'home' && $booking->service_mode === 'clinic' && $booking->status === BookingStatus::CONFIRMED && ! $scheduleChanged && ! $sentConfirmationForStatusChange) {
+            $this->sendConfirmation($booking);
+        }
         if ($scheduleChanged && ! $sentConfirmationForStatusChange && ! in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW], true)) {
             if ($booking->status === BookingStatus::CONFIRMED) {
                 $this->reminderService->syncForConfirmedBooking($booking);
@@ -183,6 +240,17 @@ class BookingService
 
     public function cancel(Booking $booking, string $status = BookingStatus::CANCELLED, ?string $note = null): Booking
     {
+        $updated = DB::transaction(fn () => $this->cancelBooking($booking, $status, $note));
+
+        return $booking->setRawAttributes($updated->getAttributes(), true)->unsetRelations();
+    }
+
+    private function cancelBooking(Booking $booking, string $status, ?string $note): Booking
+    {
+        $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+        if ($booking->finance_managed && app(BookingFinance::class)->figures($booking)['net'] > 0) {
+            throw ValidationException::withMessages(['booking' => 'Booking berbayar memerlukan pencatatan refund sebelum dibatalkan.']);
+        }
         if (! in_array($status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER], true)) {
             throw new InvalidArgumentException('Status pembatalan tidak valid.');
         }
@@ -192,6 +260,7 @@ class BookingService
             'status' => $status,
             'notes' => trim(($booking->notes ? $booking->notes."\n" : '').($note ?: 'Booking dibatalkan.')),
         ]);
+        app(TherapistFeeService::class)->sync($booking, auth()->user(), request());
 
         $this->releaseSlot($oldSlot);
         $this->reminderService->cancelForBooking($booking);
@@ -202,6 +271,18 @@ class BookingService
 
     public function delete(Booking $booking): void
     {
+        DB::transaction(fn () => $this->deleteBooking($booking));
+    }
+
+    private function deleteBooking(Booking $booking): void
+    {
+        $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+        if ($booking->payments()->exists() || (int) $booking->legacy_credit_cents > 0 || in_array($booking->payment_status, ['paid', 'partial', 'refunded'], true)) {
+            throw ValidationException::withMessages(['booking' => 'Booking memiliki riwayat pembayaran. Batalkan dan pertahankan jejak transaksi.']);
+        }
+        if ($booking->therapistFee()->exists()) {
+            throw ValidationException::withMessages(['booking' => 'Booking memiliki riwayat fee terapis. Batalkan/koreksi status agar jejak perhitungan tetap tersimpan.']);
+        }
         $slot = $booking->availabilitySlot;
         $shouldReleaseSlot = ! in_array($booking->status, [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW], true);
 
@@ -212,18 +293,40 @@ class BookingService
         }
     }
 
-    public function hasConflict(int $therapistId, string $bookingDate, string $startTime, string $endTime, ?int $ignoreBookingId = null): bool
+    public function hasConflict(int $therapistId, string $bookingDate, string $startTime, string $endTime, ?int $ignoreBookingId = null, ?array $quote = null): bool
     {
+        $window = app(HomeService::class)->busyWindow($bookingDate, $startTime, $endTime, $quote);
+
         return Booking::query()
             ->where('therapist_id', $therapistId)
-            ->whereDate('booking_date', $bookingDate)
+            ->whereBetween('booking_date', [Carbon::parse($window['busy_from'])->subDay()->startOfDay(), Carbon::parse($window['busy_until'])->addDay()->endOfDay()])
             ->whereNotIn('status', [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW])
             ->when($ignoreBookingId, fn ($query) => $query->whereKeyNot($ignoreBookingId))
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->where('start_time', '<', $endTime)
-                    ->where('end_time', '>', $startTime);
-            })
-            ->exists();
+            ->get()->contains(function (Booking $other) use ($window) {
+                $from = $other->busy_from ?? Carbon::parse($other->booking_date->toDateString().' '.$other->start_time);
+                $until = $other->busy_until ?? Carbon::parse($other->booking_date->toDateString().' '.$other->end_time);
+
+                return $from < $window['busy_until'] && $until > $window['busy_from'];
+            });
+    }
+
+    private function visitAttributes(array $data, Service $service, ?AvailabilitySlot $slot, Carbon $date, Carbon $start, Carbon $end, ?Booking $booking = null): array
+    {
+        $home = ($data['service_mode'] ?? $booking?->service_mode ?? 'clinic') === 'home';
+        $therapistId = $data['therapist_id'] ?? ($home ? $slot?->therapist_id : null);
+        if ($home && $slot?->therapist_id && (int) $slot->therapist_id !== (int) $therapistId) {
+            throw new InvalidArgumentException('Terapis harus sesuai dengan slot Home Service yang dipilih.');
+        }
+        if ($therapistId) {
+            Therapist::whereKey($therapistId)->lockForUpdate()->first();
+        }
+        $visit = app(HomeService::class)->attributes(array_merge($data, ['therapist_id' => $therapistId]), $service, $booking);
+        $quote = $visit['home_service_quote'];
+        if ($therapistId && ! in_array($data['status'] ?? '', [BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::NO_SHOW], true) && $this->hasConflict((int) $therapistId, $date->toDateString(), $start->format('H:i:s'), $end->format('H:i:s'), $booking?->id, $quote)) {
+            throw new InvalidArgumentException('Jadwal terapis bentrok dengan booking lain, termasuk waktu perjalanan Home Service.');
+        }
+
+        return array_merge($visit, ['therapist_id' => $therapistId], app(HomeService::class)->busyWindow($date->toDateString(), $start->format('H:i:s'), $end->format('H:i:s'), $quote));
     }
 
     private function bookingCode(): string
@@ -249,8 +352,10 @@ class BookingService
 
         $addons = ServiceAddon::query()
             ->with('addonService')
+            ->withinServiceGroup()
             ->where('service_id', $serviceId)
             ->where('is_active', true)
+            ->where('requires_confirmation', false)
             ->whereIn('id', $ids)
             ->get();
 
@@ -263,6 +368,10 @@ class BookingService
 
     private function syncBookingAddOns(Booking $booking, $addons): void
     {
+        if ($booking->service_mode === 'home' && $booking->addOns()->pluck('service_addon_id')->sort()->values()->all() === $addons->pluck('id')->sort()->values()->all()) {
+            return;
+        }
+        $booking->unsetRelation('addOns');
         $booking->addOns()->delete();
 
         foreach ($addons as $addon) {
@@ -271,7 +380,7 @@ class BookingService
                 'addon_service_id' => $addon->addon_service_id,
                 'name' => $addon->displayName() ?: 'Addon layanan',
                 'duration_minutes' => (int) $addon->duration_minutes,
-                'price' => (float) $addon->price_adjustment,
+                'price' => $booking->service_mode === 'home' ? (float) ($booking->home_service_quote['addon_prices'][$addon->id] ?? $addon->price_adjustment) : (float) $addon->price_adjustment,
             ]);
         }
     }
@@ -289,7 +398,7 @@ class BookingService
     private function resolveSlot(array $data, int $serviceId, string $date, string $startTime, string $endTime, ?Booking $currentBooking = null): ?AvailabilitySlot
     {
         $slot = ! empty($data['availability_slot_id'])
-            ? AvailabilitySlot::find((int) $data['availability_slot_id'])
+            ? AvailabilitySlot::whereKey((int) $data['availability_slot_id'])->lockForUpdate()->first()
             : AvailabilitySlot::query()
                 ->whereDate('slot_date', $date)
                 ->where('service_id', $serviceId)
@@ -301,6 +410,7 @@ class BookingService
                     $inner->whereNull('therapist_id')->orWhere('therapist_id', $data['therapist_id']);
                 }))
                 ->orderByRaw('therapist_id is null')
+                ->lockForUpdate()
                 ->first();
 
         if (! $slot && ! empty($data['availability_slot_id'])) {
@@ -451,6 +561,11 @@ class BookingService
 
     private function sendConfirmation(Booking $booking): void
     {
+        if ($booking->service_mode === 'home') {
+            $this->sendHomeVisitNotice($booking);
+
+            return;
+        }
         $target = $this->whatsAppTarget($booking);
         if (! $target) {
             return;
@@ -469,6 +584,11 @@ class BookingService
 
     private function sendRescheduleNotice(Booking $booking, ?string $oldDate, ?string $oldTime): void
     {
+        if ($booking->service_mode === 'home') {
+            $this->sendHomeVisitNotice($booking);
+
+            return;
+        }
         $target = $this->whatsAppTarget($booking);
         if (! $target) {
             return;
@@ -489,6 +609,9 @@ class BookingService
 
     private function sendCancellationNotice(Booking $booking): void
     {
+        if ($booking->service_mode === 'home' && $booking->therapist_id) {
+            SendHomeVisitAssignmentJob::dispatch($booking->id, $booking->homeVisitRevision())->afterCommit();
+        }
         $target = $this->whatsAppTarget($booking);
         if (! $target) {
             return;
@@ -519,5 +642,21 @@ class BookingService
         }
 
         return [$conversation];
+    }
+
+    private function sendHomeVisitNotice(Booking $booking): void
+    {
+        $booking->loadMissing(['customer', 'service', 'therapist']);
+        $conversation = $booking->conversation ?: Conversation::where('customer_id', $booking->customer_id)->whereNotNull('wa_chat_id')->where('wa_chat_id', '!=', '')->latest('last_message_at')->first();
+        if (! $conversation && $booking->customer?->normalized_whatsapp_number) {
+            $conversation = Conversation::create(['customer_id' => $booking->customer_id, 'wa_chat_id' => $booking->customer->normalized_whatsapp_number.'@c.us', 'channel' => 'whatsapp', 'status' => 'open', 'ai_enabled' => true]);
+        }
+        if ($conversation) {
+            $message = 'Bunda, booking Home Service '.$booking->booking_code.' '.($booking->status === BookingStatus::CONFIRMED ? 'dikonfirmasi' : 'diperbarui (menunggu konfirmasi)').' untuk '.$booking->service?->name.' pada '.$booking->booking_date->format('d M Y').' pukul '.substr($booking->start_time, 0, 5).'. Terapis: '.($booking->therapist?->name ?: 'menunggu penugasan').'. Alamat: '.$booking->visit_address.'. Patokan: '.($booking->visit_landmark ?: '-').'. Ongkos: Rp '.number_format((float) $booking->travel_fee, 0, ',', '.').'. Total: Rp '.number_format($booking->totalPrice(), 0, ',', '.').'. '.($booking->status === BookingStatus::CONFIRMED ? 'Tim kami akan datang ke lokasi Bunda. ' : 'Jadwal akan dikonfirmasi admin terlebih dahulu. ').$booking->navigationUrl();
+            SendWhatsAppMessageJob::dispatch($conversation->id, null, 'system', $message)->afterCommit();
+        }
+        if ($booking->status === BookingStatus::CONFIRMED && $booking->therapist_id) {
+            SendHomeVisitAssignmentJob::dispatch($booking->id, $booking->homeVisitRevision())->afterCommit();
+        }
     }
 }

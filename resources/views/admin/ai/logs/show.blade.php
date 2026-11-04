@@ -1,0 +1,19 @@
+@extends('layouts.app')
+@section('title','Alur keputusan AI #'.$log->id)
+@section('content')
+@include('partials.admin-workbench-assets')
+@if(data_get($log->meta,'ops_demo'))<p class="card" style="padding:1rem;" role="status"><strong>DEMO monitoring lokal.</strong> Status di bawah adalah contoh. Tidak ada panggilan gateway atau pesan WhatsApp yang dikirim. Kirim ulang untuk kontak contoh ini diblokir.</p>@endif
+<x-ui.page-header eyebrow="AI Management" title="Alur keputusan AI #{{ $log->id }}" description="Dari pesan masuk sampai jawaban diterima gateway atau ditahan."><x-slot name="actions"><a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'ai-logs') }}">Kembali ke AI Logs</a></x-slot></x-ui.page-header>
+<div class="grid grid-2"><section class="card"><div class="card-body"><h2 class="section-title">1. Pesan masuk</h2>
+@if($log->message)<p>Pesan #{{ $log->message_id }} · {{ $log->message->created_at->format('d M Y H:i') }} WIB</p><p class="muted">Isi asli dan data pelanggan diperiksa melalui Inbox sesuai hak akses.</p><a class="button button-secondary" href="{{ route('admin.inbox',['conversation'=>$log->conversation_id]) }}">Buka percakapan</a>@else<p>Simulasi atau sumber pesan sudah tidak tersedia.</p>@endif
+</div></section><section class="card"><div class="card-body"><h2 class="section-title">2. Keputusan asisten</h2><p><strong>{{ $trace['domain_label'] }}</strong><br>{{ $trace['decision_label'] }}</p><p class="muted">{{ $trace['intent'] }} · {{ $trace['decision_reason'] }}</p><details class="wb-technical"><summary>Detail kebijakan & sumber</summary><p>Revisi kebijakan: {{ data_get($log->meta,'policy.revision','—') }} · {{ data_get($log->meta,'provider','local') }}</p><p>Sumber: {{ implode(', ',$log->sources ?? []) ?: 'Katalog atau panduan alur' }}</p><p>Perubahan transaksi oleh AI: tidak diizinkan.</p></details></div></section></div>
+<section class="card"><div class="card-body"><h2 class="section-title">3. Hasil pengiriman</h2><span class="badge badge-brown">{{ $trace['state_label'] }}</span><p>{{ $trace['reason_label'] }} @if($trace['reason'])<small>({{ $trace['reason'] }})</small>@endif</p>
+@if($log->outgoingMessage)<p>Pesan keluar #{{ $log->outgoing_message_id }} · {{ $log->outgoingMessage->send_provider }} · {{ $log->outgoingMessage->send_session }}<br>Percobaan kirim: {{ $log->outgoingMessage->send_attempts }} · Diterima gateway: {{ $log->outgoingMessage->sent_at?->format('d M Y H:i') ?? 'Belum ada bukti penerimaan' }}</p>
+@if($log->outgoingMessage->failed_reason)<p>{{ app(\App\Services\AI\AiAuditPrivacy::class)->text(\App\Services\WhatsApp\DeliveryFailure::safeText($log->outgoingMessage->failed_reason)) }}</p>@endif
+<a class="button button-secondary" href="{{ route('admin.whatsapp.monitor',['source'=>'message','message_id'=>$log->outgoing_message_id,'include_demo'=>1,'start_date'=>$log->outgoingMessage->created_at->toDateString(),'end_date'=>today()->toDateString()]) }}">Periksa pada monitoring WhatsApp</a>
+@elseif($trace['state']==='queued')<p>Keputusan sudah masuk antrean. Pesan keluar akan ditautkan saat worker mulai memprosesnya.</p>
+@elseif($trace['state']==='simulation')<p>Pengujian ini tidak mengirim pesan WhatsApp.</p>@endif
+<p class="muted">Hasil yang belum pasti tidak dikirim ulang otomatis. Kelayakan retry diperiksa di monitoring dengan konteks dan identitas terbaru.</p>
+</div></section>
+<section class="card"><div class="card-body"><h2 class="section-title">Jawaban yang dicatat</h2><div style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ app(\App\Services\AI\AiAuditPrivacy::class)->text($log->response) }}</div><p class="muted">Hasil transaksi privat tetap berada pada percakapan asal. Token akses dan bukti verifikasi tidak ditampilkan pada halaman ini.</p></div></section>
+@endsection

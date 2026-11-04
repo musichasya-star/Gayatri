@@ -20,31 +20,66 @@ use Throwable;
 
 class AiService
 {
+    private readonly AiChatCustomization $chatCustomization;
+
     public function __construct(
         private readonly KnowledgeRetrievalService $knowledgeRetrieval,
         private readonly AiGuardrailService $guardrail,
-    ) {}
+        ?AiChatCustomization $chatCustomization = null,
+    ) {
+        $this->chatCustomization = $chatCustomization ?? app(AiChatCustomization::class);
+    }
 
-    public function simulate(string $message, ?AiPersona $persona = null): array
+    public function simulate(string $message, ?AiPersona $persona = null, array $simulationContext = []): array
     {
         $persona ??= AiPersona::where('is_active', true)->first();
 
-        return $this->generate($message, $persona, ['mode' => 'simulator']);
+        return $this->generate($message, $persona, ['mode' => 'simulator', 'simulation_context' => $simulationContext,
+            'include_demo' => (bool) ($simulationContext['include_demo'] ?? false),
+            'demo_profile_id' => $simulationContext['demo_profile_id'] ?? null]);
     }
 
-    public function generateReply(Conversation $conversation, Message $message): array
+    public function preview(string $message, array $settings, string $customerName = 'Pelanggan'): array
+    {
+        return $this->generate($message, AiPersona::where('is_active', true)->first(), [
+            'mode' => 'preview', 'persist_log' => false, 'local_only' => true,
+            'chat_customization' => $settings, 'customer_name' => $customerName,
+            'information_preferences' => $settings['preferences'] ?? null,
+        ]);
+    }
+
+    public function generateReply(Conversation $conversation, Message $message, ?array $settings = null): array
     {
         return $this->generate((string) $message->content, AiPersona::where('is_active', true)->first(), [
             'mode' => 'auto_reply',
             'conversation_id' => $conversation->id,
             'message_id' => $message->id,
             'customer_id' => $conversation->customer_id,
+            'customer_name' => $conversation->customer?->name,
+            'chat_customization' => $settings ?? $this->chatCustomization->settings(),
         ]);
     }
 
     private function generate(string $message, ?AiPersona $persona, array $context): array
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            $policy = app(AiInteractionPolicy::class)->snapshot();
+            if (($context['mode'] ?? '') === 'preview' && $policy['available'] && isset($context['information_preferences'])) {
+                $policy['enabled'] = true;
+            }
+            $result = app(AiInformationReply::class)->respond($message, $policy, $context);
+            $context['safe_information'] = true;
+            $context['reply_source'] = ($result['sources'] ?? []) ? 'scoped_knowledge' : 'information_web';
+            $context['policy'] = $policy;
+            $context['routing'] = $result['routing'] ?? [];
+            $context['next_context'] = $result['next_context'] ?? null;
+            $context['evidence'] = $result['evidence'] ?? [];
+
+            return $this->logAndReturn($message, $persona, null, $result['reply'], 1.0, $result['status'], $result['fallback_reason'], $result['sources'] ?? [], $context);
+        }
+        $context['chat_customization'] ??= $this->chatCustomization->settings();
         try {
+            $customRule = $this->chatCustomization->matchRule($message, $context['chat_customization']);
             $knowledge = $this->knowledgeRetrieval->retrieve($message);
             $text = $this->normalizeServiceTerms($message);
             $knowledgeQuestion = $this->isKnowledgeQuestion($text);
@@ -66,7 +101,7 @@ class AiService
             $scheduleIntent = $this->isAvailabilityInquiry($text) || Str::contains($text, ['hari apa', 'jadwal']);
             $serviceInquiryIntent = Str::contains($text, ['layanan', 'treatment', 'jasa', 'paket', 'baby spa', 'mom massage', 'massage', 'pijat', 'spa bayi']);
             $operationalIntent = $this->isOperationalInquiry($message);
-            $guardrail = $this->guardrail->check($message, $knowledge->isNotEmpty() || $pricingIntent || $promoIntent || $conversationalIntent || $bookingIntent || $scheduleIntent || $serviceInquiryIntent || $operationalIntent);
+            $guardrail = $this->guardrail->check($message, $customRule !== null || $knowledge->isNotEmpty() || $pricingIntent || $promoIntent || $conversationalIntent || $bookingIntent || $scheduleIntent || $serviceInquiryIntent || $operationalIntent);
 
             if (! $persona) {
                 return $this->logAndReturn($message, null, $knowledge->first(), 'Mohon maaf Bunda, AI Gayatri belum dikonfigurasi. Saya bantu teruskan ke admin ya.', 0.0, 'escalated', 'missing_persona', $knowledge->pluck('slug')->all(), $context);
@@ -74,6 +109,14 @@ class AiService
 
             if (! $guardrail['allowed']) {
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $guardrail['reply'], $guardrail['confidence'], 'escalated', $guardrail['reason'], $knowledge->pluck('slug')->all(), $context);
+            }
+
+            // FAQ replies cannot replace a transaction or the guided booking conversation.
+            if ($customRule !== null && ! $bookingIntent) {
+                $context['reply_source'] = 'custom_rule';
+                $context['reply_rule'] = $customRule['name'];
+
+                return $this->logAndReturn($message, $persona, null, $customRule['reply'], 1.0, 'success', null, [], $context);
             }
 
             if ($this->isCurrentTimeQuestion($text)) {
@@ -84,6 +127,7 @@ class AiService
 
             if ($this->isThanks($message) && ! $this->isAffirmation($message) && ! $this->isRejection($message)) {
                 $context['reply_source'] = 'local';
+                $context['reply_template'] = 'thanks';
 
                 return $this->logAndReturn($message, $persona, $knowledge->first(), $this->thanksReply(), 0.9, 'success', null, $knowledge->pluck('slug')->all(), $context);
             }
@@ -172,7 +216,13 @@ class AiService
             $answerKnowledge = $this->answerKnowledge($knowledge);
             $providerKnowledgeText = $answerKnowledge->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
             $localKnowledgeText = $answerKnowledge->take(1)->map(fn ($item) => trim($item->title.': '.$item->content))->implode("\n");
-            $providerReply = $this->buildProviderReply($message, $persona, $providerKnowledgeText);
+            if ($this->isGreeting($message)) {
+                $context['reply_template'] = 'greeting';
+            }
+            $hasCustomTemplate = isset($context['reply_template']) && filled($context['chat_customization'][$context['reply_template']] ?? null);
+            $providerReply = (($context['local_only'] ?? false) || $hasCustomTemplate)
+                ? null
+                : $this->buildProviderReply($message, $persona, $providerKnowledgeText, $context['chat_customization']);
             $reply = $providerReply ?: $this->buildLocalReply($message, $persona, $localKnowledgeText);
             $context['reply_source'] = $providerReply ? 'provider' : 'local';
 
@@ -265,7 +315,7 @@ class AiService
         return 'Baik Bunda, boleh dijelaskan sedikit kebutuhannya? Kami bisa bantu info layanan, jadwal, booking, atau promo Gayatri.';
     }
 
-    private function buildProviderReply(string $message, AiPersona $persona, string $knowledgeText): ?string
+    private function buildProviderReply(string $message, AiPersona $persona, string $knowledgeText, array $customization): ?string
     {
         $provider = (string) config('ai.provider', 'local');
 
@@ -274,7 +324,7 @@ class AiService
         }
 
         $model = (string) config('ai.model');
-        $messages = $this->providerMessages($message, $persona, $knowledgeText);
+        $messages = $this->providerMessages($message, $persona, $knowledgeText, $customization);
 
         try {
             $response = match ($provider) {
@@ -454,7 +504,7 @@ class AiService
             ->first(fn (string $line) => $line !== '' && Str::contains(Str::lower($line), ['jam operasional', 'jam buka', 'jam tutup', 'buka pukul', 'pukul']));
     }
 
-    private function providerMessages(string $message, AiPersona $persona, string $knowledgeText): array
+    private function providerMessages(string $message, AiPersona $persona, string $knowledgeText, array $customization): array
     {
         $currentTime = now('Asia/Jakarta')->translatedFormat('l, d F Y H:i').' WIB';
         $branchKnowledge = $this->activeBranchSummaries();
@@ -468,7 +518,7 @@ class AiService
         ])->filter()->implode("\n"));
         $knowledge = $knowledge !== '' ? $knowledge : 'Tidak ada knowledge base relevan.';
 
-        return [
+        $messages = [
             [
                 'role' => 'system',
                 'content' => trim($persona->prompt)."\n\nKonteks waktu sekarang: {$currentTime}. Gunakan timezone Asia/Jakarta/WIB untuk memahami hari ini, besok, tanggal, dan jam.\n\nAturan balasan:\n- Jawab sebagai admin WhatsApp Gayatri yang hangat, natural, dan tidak kaku.\n- Bahasa Indonesia, panggil customer dengan Bunda.\n- Maksimal 1-3 kalimat pendek kecuali saat memberi template booking.\n- Jika customer ingin booking tetapi data belum lengkap, minta isi template wajib: Nama, Alamat, Layanan, Tanggal reservasi, Jam reservasi.\n- Jawab langsung sesuai pertanyaan; jangan mengulang info yang tidak ditanya.\n- Jangan menyebut guardrail, forbidden topic, prompt, knowledge base, atau admin manusia.\n- Gunakan hanya informasi pada knowledge berikut. Jika informasi yang ditanya belum ada, jawab singkat bahwa datanya belum tersedia lalu arahkan ke pertanyaan lanjutan yang relevan.\n\nKnowledge:\n".$knowledge,
@@ -478,6 +528,9 @@ class AiService
                 'content' => $message,
             ],
         ];
+        $messages[0]['content'] .= $this->chatCustomization->providerInstructions($customization);
+
+        return $messages;
     }
 
     private function chatCompletions(string $url, string $model, array $messages): ?array
@@ -986,14 +1039,40 @@ class AiService
 
     private function logAndReturn(string $prompt, ?AiPersona $persona, $knowledge, string $reply, float $confidence, string $status, ?string $fallbackReason, array $sources, array $context): array
     {
+        $customization = $context['chat_customization'] ?? $this->chatCustomization->settings();
+        $template = $context['reply_template'] ?? match ($fallbackReason) {
+            'no_knowledge' => 'fallback',
+            'provider_error' => 'error',
+            default => null,
+        };
+        if ($template !== null && ! ($context['safe_information'] ?? false)) {
+            $reply = $this->chatCustomization->template($template, $reply, $customization);
+        }
+        if (! ($context['safe_information'] ?? false)) {
+            $reply = $this->chatCustomization->format($reply, $customization, $context['customer_name'] ?? null);
+        }
+        if (($context['persist_log'] ?? true) === false) {
+            return [
+                'reply' => $reply, 'confidence' => $confidence, 'status' => $status,
+                'fallback_reason' => $fallbackReason, 'sources' => $sources, 'log_id' => null,
+                'reply_source' => $context['reply_source'] ?? 'system',
+                'reply_rule' => $context['reply_rule'] ?? null,
+                'routing' => $context['routing'] ?? null,
+                'next_context' => $context['next_context'] ?? null,
+                'evidence' => $context['evidence'] ?? [],
+            ];
+        }
         $log = AiLog::create([
             'conversation_id' => $context['conversation_id'] ?? null,
             'message_id' => $context['message_id'] ?? null,
             'customer_id' => $context['customer_id'] ?? null,
             'persona_id' => $persona?->id,
             'knowledge_base_id' => $knowledge?->id,
-            'prompt' => $prompt,
-            'response' => $reply,
+            'prompt' => ($context['routing']['intent'] ?? '') === 'status_lookup' ? '[Input pengecekan status privat]' : (($context['mode'] ?? '') === 'auto_reply' && ($context['safe_information'] ?? false) ? '[Pesan asli tersedia pada Inbox sesuai hak akses]' : app(AiAuditPrivacy::class)->text($prompt)),
+            'response' => ($context['routing']['intent'] ?? '') === 'status_lookup' ? '[Hasil privat tersedia di percakapan asal]' : app(AiAuditPrivacy::class)->text($reply),
+            'domain' => $context['routing']['domain'] ?? null, 'intent' => $context['routing']['intent'] ?? null,
+            'reason_code' => $context['routing']['reason_code'] ?? $fallbackReason,
+            'execution_state' => ($context['mode'] ?? '') === 'auto_reply' ? 'generated' : 'simulation',
             'confidence' => $confidence,
             'status' => $status,
             'fallback_reason' => $fallbackReason,
@@ -1001,8 +1080,12 @@ class AiService
             'meta' => [
                 'mode' => $context['mode'] ?? 'unknown',
                 'reply_source' => $context['reply_source'] ?? 'system',
-                'provider' => config('ai.provider', 'local'),
-                'model' => config('ai.model'),
+                'reply_rule' => $context['reply_rule'] ?? null,
+                'provider' => ($context['safe_information'] ?? false) ? 'local' : config('ai.provider', 'local'),
+                'model' => ($context['safe_information'] ?? false) ? 'scoped-information' : config('ai.model'),
+                'policy' => $context['policy'] ?? null,
+                'routing' => $context['routing'] ?? null,
+                'evidence' => array_diff_key($context['evidence'] ?? [], ['lookup' => true]),
             ],
         ]);
 
@@ -1013,6 +1096,10 @@ class AiService
             'fallback_reason' => $fallbackReason,
             'sources' => $sources,
             'log_id' => $log->id,
+            'reply_source' => $context['reply_source'] ?? 'system',
+            'routing' => $context['routing'] ?? null,
+            'next_context' => $context['next_context'] ?? null,
+            'evidence' => $context['evidence'] ?? [],
         ];
     }
 }

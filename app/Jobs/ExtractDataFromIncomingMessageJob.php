@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Message;
 use App\Services\AI\AiDataExtractionService;
+use App\Services\AI\AiInteractionPolicy;
 use App\Services\AI\ConversationFlowService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -16,6 +17,9 @@ class ExtractDataFromIncomingMessageJob implements ShouldQueue
 
     public function handle(AiDataExtractionService $extractionService, ConversationFlowService $flowService): void
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            return;
+        }
         if (! (bool) config('crm.ai_data_automation.enabled', true)) {
             return;
         }

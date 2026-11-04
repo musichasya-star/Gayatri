@@ -66,6 +66,16 @@ class Customer extends Model
         return $this->hasMany(Booking::class);
     }
 
+    public function rentalOrders(): HasMany
+    {
+        return $this->hasMany(RentalOrder::class);
+    }
+
+    public function laundryOrders(): HasMany
+    {
+        return $this->hasMany(LaundryOrder::class);
+    }
+
     public function reminders(): HasMany
     {
         return $this->hasMany(Reminder::class);
@@ -89,6 +99,11 @@ class Customer extends Model
     public function feedback(): HasMany
     {
         return $this->hasMany(Feedback::class);
+    }
+
+    public function birthdayGreetings(): HasMany
+    {
+        return $this->hasMany(BirthdayGreeting::class);
     }
 
     public function getWhatsappDisplayAttribute(): string

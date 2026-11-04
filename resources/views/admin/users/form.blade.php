@@ -3,13 +3,14 @@
 @section('title', ($user->exists ? 'Edit User' : 'Tambah User') . ' - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
     <x-ui.page-header
         eyebrow="Users & Roles"
         title="{{ $user->exists ? 'Edit User' : 'Tambah User' }}"
         description="Atur identitas, role, status, dan password user dashboard."
     >
         <x-slot name="actions">
-            <a class="button button-secondary" href="{{ route('admin.users.index') }}"><i data-lucide="arrow-left"></i> Kembali</a>
+            <a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'users') }}"><i data-lucide="arrow-left"></i> Kembali</a>
         </x-slot>
     </x-ui.page-header>
 
@@ -21,8 +22,8 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="POST" action="{{ $user->exists ? route('admin.users.update', $user) : route('admin.users.store') }}" class="grid grid-2">
-                @csrf
+            <form data-guard-unsaved method="POST" action="{{ $user->exists ? route('admin.users.update', $user) : route('admin.users.store') }}" class="grid grid-2">
+                @csrf @include('partials.admin-review-fields',['reviewModule'=>'users'])
                 @if ($user->exists)
                     @method('PUT')
                 @endif
@@ -76,7 +77,7 @@
                 </label>
 
                 <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: .75rem; flex-wrap: wrap;">
-                    <a class="button button-secondary" href="{{ route('admin.users.index') }}">Batal</a>
+                    <a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'users') }}">Batal</a>
                     <button class="button button-primary" type="submit"><i data-lucide="save"></i> Simpan</button>
                 </div>
             </form>

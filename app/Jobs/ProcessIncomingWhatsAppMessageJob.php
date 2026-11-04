@@ -7,11 +7,16 @@ use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
 use App\Models\WhatsAppSession;
+use App\Services\AI\AiInteractionPolicy;
 use App\Services\CRM\FeedbackService;
+use App\Services\WhatsApp\GatewayConfig;
+use App\Services\WhatsApp\WhatsAppSenderIdentity;
 use App\Support\ConversationStatus;
+use App\Support\CustomerPhone;
 use App\Support\CustomerStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 
 class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
 {
@@ -23,8 +28,9 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
     {
         $feedbackService ??= app(FeedbackService::class);
 
-        $sessionName = (string) data_get($this->event, 'session', config('waha.default_session'));
+        $sessionName = (string) data_get($this->event, 'session', GatewayConfig::get('default_session'));
         $payload = (array) data_get($this->event, 'payload', []);
+        unset($payload['_gayatri_sender']);
         $chatId = (string) ($payload['from'] ?? $payload['chatId'] ?? '');
 
         if ($chatId === '' || ! $this->isDirectCustomerChat($chatId)) {
@@ -38,6 +44,8 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
             ['session_name' => $sessionName],
             ['status' => 'unknown']
         );
+        $senderIdentity = app(WhatsAppSenderIdentity::class);
+        $whatsappNumber = $senderIdentity->trustedPhone($this->event, $session) ?? $whatsappNumber;
 
         $conversation = Conversation::with('customer')->where('wa_chat_id', $chatId)->first();
 
@@ -48,12 +56,15 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
                 $conversation->update(['whatsapp_session_id' => $session->id]);
             }
         } else {
-            $customer = Customer::firstOrCreate(
-                ['whatsapp_number' => $whatsappNumber],
+            $phone = $senderIdentity->phone($whatsappNumber);
+            $matches = $phone ? CustomerPhone::matching($phone)->get() : collect();
+            $ambiguous = $matches->count() > 1;
+            $customer = $matches->count() === 1 ? $matches->first() : Customer::firstOrCreate(
+                ['whatsapp_number' => $ambiguous ? 'unverified:'.$chatId : $whatsappNumber],
                 [
                     'name' => 'Customer '.$whatsappNumber,
                     'phone' => $whatsappNumber,
-                    'status' => CustomerStatus::LEAD,
+                    'status' => $ambiguous ? CustomerStatus::INACTIVE : CustomerStatus::LEAD,
                     'last_interaction_at' => now(),
                 ]
             );
@@ -77,32 +88,47 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
             }
         }
 
-        if ($messageId !== '' && Message::where('wa_message_id', $messageId)->exists()) {
+        $received = DB::transaction(function () use ($conversation, $session, $messageId, $payload, $senderIdentity) {
+            $current = Conversation::with('customer')->lockForUpdate()->findOrFail($conversation->id);
+            $attributes = [
+                'conversation_id' => $current->id,
+                'customer_id' => $current->customer_id,
+                'wa_message_id' => $messageId !== '' ? $messageId : null,
+                'direction' => 'incoming',
+                'sender_type' => 'customer',
+                'message_type' => $this->resolveMessageType($payload),
+                'content' => $this->resolveContent($payload),
+                'payload' => $payload,
+                'sent_at' => $this->resolveTimestamp($payload['timestamp'] ?? null),
+            ];
+            $message = $messageId !== '' ? Message::firstOrCreate(['wa_message_id' => $messageId], $attributes) : Message::create($attributes);
+            if (! $message->wasRecentlyCreated) {
+                return null;
+            }
+            $senderIdentity->observe($this->event, $session, $message);
+            $current->refresh()->load('customer');
+            $nextStatus = in_array($current->status, [ConversationStatus::HUMAN_HANDLED, ConversationStatus::CLOSED, ConversationStatus::ESCALATED], true)
+                ? $current->status : ConversationStatus::OPEN;
+            $changes = [
+                'status' => $nextStatus,
+                'last_message_at' => $this->resolveTimestamp($payload['timestamp'] ?? null) ?? now(),
+                'last_incoming_at' => $this->resolveTimestamp($payload['timestamp'] ?? null) ?? now(),
+                'unread_count' => $current->unread_count + 1,
+            ];
+            $policy = app(AiInteractionPolicy::class);
+            if ($message->message_type !== 'text' && ! $policy->allowsLegacyAutomation() && $policy->canHandle($current)) {
+                $changes = array_replace($changes, ['status' => ConversationStatus::ESCALATED, 'ai_enabled' => false,
+                    'ai_needs_attention' => true, 'ai_handoff_reason' => 'unsupported_media']);
+            }
+            $current->update($changes);
+
+            return [$message, $current];
+        }, 3);
+        if (! $received) {
             return;
         }
-
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'customer_id' => $customer->id,
-            'wa_message_id' => $messageId !== '' ? $messageId : null,
-            'direction' => 'incoming',
-            'sender_type' => 'customer',
-            'message_type' => $this->resolveMessageType($payload),
-            'content' => $this->resolveContent($payload),
-            'payload' => $payload,
-            'sent_at' => $this->resolveTimestamp($payload['timestamp'] ?? null),
-        ]);
-
-        $nextStatus = $conversation->status === ConversationStatus::HUMAN_HANDLED
-            ? $conversation->status
-            : ConversationStatus::OPEN;
-
-        $conversation->update([
-            'status' => $nextStatus,
-            'last_message_at' => $this->resolveTimestamp($payload['timestamp'] ?? null) ?? now(),
-            'last_incoming_at' => $this->resolveTimestamp($payload['timestamp'] ?? null) ?? now(),
-            'unread_count' => $conversation->unread_count + 1,
-        ]);
+        [$message, $conversation] = $received;
+        $customer = $conversation->customer;
 
         $customer->update([
             'last_interaction_at' => now(),
@@ -118,15 +144,21 @@ class ProcessIncomingWhatsAppMessageJob implements ShouldQueue
         $campaignRecipient?->update(['replied_at' => now()]);
 
         if ($message->message_type === 'text' && trim((string) $message->content) !== '') {
-            $feedbackService->captureIncoming($message);
+            if ($feedbackService->captureIncoming($message)) {
+                $message->update(['ai_reply_dispatched_at' => now()]);
+
+                return;
+            }
             GenerateAiReplyJob::dispatch($conversation->id, $message->id);
-            ExtractDataFromIncomingMessageJob::dispatch($message->id);
+            if (app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+                ExtractDataFromIncomingMessageJob::dispatch($message->id);
+            }
         }
     }
 
     private function normalizeChatId(string $chatId): string
     {
-        return str_replace(['@c.us', '@s.whatsapp.net', '@lid'], '', $chatId);
+        return str_ends_with($chatId, '@lid') ? $chatId : str_replace(['@c.us', '@s.whatsapp.net'], '', $chatId);
     }
 
     private function isDirectCustomerChat(string $chatId): bool

@@ -14,6 +14,7 @@ use App\Services\CRM\BookingService;
 use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 class AiAutomationApprovalService
@@ -22,6 +23,11 @@ class AiAutomationApprovalService
 
     public function create(AiExtractedData $extractedData, AiAutomationRule $rule, array $proposedData): AiAutomationApproval
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            app(AiInteractionPolicy::class)->blockAutomation($extractedData, $rule);
+            throw ValidationException::withMessages(['approval' => 'Approval transaksi AI dinonaktifkan. Gunakan menu transaksi terkait.']);
+        }
+
         return AiAutomationApproval::firstOrCreate([
             'ai_extracted_data_id' => $extractedData->id,
             'target_entity' => $rule->target_entity,
@@ -41,6 +47,7 @@ class AiAutomationApprovalService
 
     public function approve(AiAutomationApproval $approval, User $user, ?array $editedData = null): array
     {
+        $this->guardLegacyApproval($approval);
         if ($approval->status !== 'pending') {
             throw new InvalidArgumentException('Approval sudah diproses.');
         }
@@ -81,6 +88,7 @@ class AiAutomationApprovalService
 
     public function reject(AiAutomationApproval $approval, User $user, string $reason): void
     {
+        $this->guardLegacyApproval($approval);
         if ($approval->status !== 'pending') {
             throw new InvalidArgumentException('Approval sudah diproses.');
         }
@@ -110,6 +118,20 @@ class AiAutomationApprovalService
             'created_by_ai' => false,
             'approved_by' => $user->id,
         ]);
+    }
+
+    private function guardLegacyApproval(AiAutomationApproval $approval): void
+    {
+        if (app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            return;
+        }
+        AiAutomationApproval::whereKey($approval->id)->where('status', 'pending')->update([
+            'status' => 'held', 'rejection_reason' => 'legacy_approval_blocked: migration_to_information_web',
+        ]);
+        if ($approval->extractedData) {
+            app(AiInteractionPolicy::class)->blockAutomation($approval->extractedData);
+        }
+        throw ValidationException::withMessages(['approval' => 'Approval AI lama dikunci, termasuk aksi reject. Periksa dan proses melalui menu transaksi terkait.']);
     }
 
     private function approveBooking(AiAutomationApproval $approval, User $user, array $data): array

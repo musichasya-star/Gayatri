@@ -1,0 +1,55 @@
+.transaction-next {
+    padding: 20px;
+    margin-block: 16px 24px;
+    border: 1px solid #dec9ae;
+    border-radius: 16px;
+    background: #f6eee3;
+    color: #4a281b;
+    overflow-wrap: anywhere;
+}
+.transaction-kicker {
+    color: #765027;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .11em;
+    margin: 0 0 8px;
+}
+.transaction-next h2 { margin: 0 0 8px; font-size: 1.35rem; }
+.transaction-next p:last-child { margin-bottom: 0; }
+.transaction-link { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
+.transaction-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    min-width: 0;
+    padding: 16px 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid #e8d8c5;
+}
+.transaction-fields legend { font-weight: 700; color: #4a281b; padding: 0 0 4px; }
+.transaction-fields label { min-width: 0; }
+.transaction-wide { grid-column: 1 / -1; }
+.transaction-recap { padding: 16px; border-radius: 14px; background: #f6eee3; margin: 0; }
+.transaction-recap div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid #e5d5c1; }
+.transaction-recap div:last-child { border: 0; }
+.transaction-recap dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.transaction-recap dt { color: #665548; }
+.transaction-progress { font-size: .85rem; color: #665548; }
+[data-transaction-sending] { opacity: .65; cursor: wait; }
+.gp-booking .transaction-fields > label { font-size: .85rem; }
+.gp-booking [data-home-service] { min-width: 0; }
+.gp-booking [data-home-service] [data-home-summary] { white-space: pre-line; overflow-wrap: anywhere; }
+.gp-rental-detail .transaction-checkout { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 24px; align-items: start; }
+.gp-rental-detail .transaction-checkout .gp-card + .gp-card { margin-top: 14px; }
+.gp-rental-detail .transaction-checkout img { width: 100%; max-height: 165px; object-fit: contain; }
+.gp-rental-detail .transaction-checkout .rental-item-row { min-width: 0; }
+.gp-rental-detail .transaction-checkout .rental-item-row select { width: 100%; }
+.gp-laundry .laundry-closed-title { margin-top: 18px; }
+.gp-laundry .laundry-tariff-link { margin-top: 20px; }
+.gp-rental-detail button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 700px) {
+    .transaction-fields, .gp-rental-detail .transaction-checkout { grid-template-columns: minmax(0, 1fr); }
+    .transaction-next { padding: 16px; }
+    .transaction-recap div { font-size: .85rem; }
+}

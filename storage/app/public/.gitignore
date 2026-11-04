@@ -1,2 +1,6 @@
 *
 !.gitignore
+!catalog/
+catalog/*
+!catalog/gayatri-menu/
+!catalog/gayatri-menu/**

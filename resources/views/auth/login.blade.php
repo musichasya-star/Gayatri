@@ -38,6 +38,7 @@
             <h2 class="page-title" style="font-size: clamp(1.7rem, 4vw, 2.35rem);">Masuk ke Dashboard</h2>
             <p class="page-description">Gunakan akun owner, admin, sales, atau terapis untuk melanjutkan.</p>
 
+            @if(session('status'))<p role="status">{{ session('status') }}</p>@endif
             @if ($errors->any())
                 <div style="margin-top: 1rem; padding: .85rem; border: 1px solid rgba(201,122,106,.45); border-radius: 1rem; color: #6e3128; background: rgba(201,122,106,.14);">
                     {{ $errors->first() }}
@@ -48,7 +49,7 @@
                 @csrf
                 <label>
                     <span class="muted" style="display: block; margin-bottom: .4rem; font-weight: 700;">Email</span>
-                    <input class="input" type="email" name="email" value="{{ old('email') }}" placeholder="owner@gayatri.local" autocomplete="email" required autofocus>
+                    <input class="input" type="email" name="email" value="{{ old('email') }}" placeholder="Email akun Anda" autocomplete="email" required autofocus>
                 </label>
 
                 <label>
@@ -60,16 +61,18 @@
                     <label style="display: inline-flex; align-items: center; gap: .5rem; color: var(--text-muted);">
                         <input type="checkbox" name="remember"> Ingat saya
                     </label>
-                    <a href="#" style="color: var(--primary-brown); font-weight: 800;">Lupa password?</a>
+                    <a href="{{ route('password.request') }}" style="color: var(--primary-brown); font-weight: 800;">Lupa password?</a>
                 </div>
 
                 <button class="button button-primary" type="submit" style="width: 100%;"><i data-lucide="log-in"></i> Masuk</button>
             </form>
 
+            @if(app()->environment(['local','baileys-local','testing']))
             <div style="margin-top: 1rem; padding: .9rem; border: 1px solid rgba(216,195,165,.66); border-radius: 1rem; background: rgba(248,243,234,.72);">
                 <strong>Demo account</strong>
                 <p class="muted" style="margin: .3rem 0 0;">owner@gayatri.local / password</p>
             </div>
+            @endif
         </section>
     </main>
 

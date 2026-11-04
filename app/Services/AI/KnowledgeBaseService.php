@@ -17,7 +17,7 @@ class KnowledgeBaseService
             return;
         }
 
-        $chunks = collect(str_split($content, 900));
+        $chunks = collect(mb_str_split($content, 900, 'UTF-8'));
 
         $chunks->each(function (string $chunk, int $index) use ($knowledgeBase) {
             $knowledgeBase->chunks()->create([

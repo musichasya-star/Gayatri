@@ -10,12 +10,15 @@ use App\Models\Customer;
 use App\Models\Service;
 use App\Models\Therapist;
 use App\Models\User;
+use App\Services\AI\AiInteractionPolicy;
 use App\Services\AI\AiService;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use App\Support\PaymentStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
 class AvailabilitySlotTest extends TestCase
@@ -188,8 +191,12 @@ class AvailabilitySlotTest extends TestCase
         $this->assertDatabaseHas('availability_slots', ['id' => $bookedSlot->id]);
     }
 
+    #[Group('legacy-ai')]
     public function test_ai_answers_schedule_from_real_availability_slots(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         [, , $branch, $service, $therapist] = $this->seedData();
         config()->set('ai.provider', 'local');
         AiPersona::create([

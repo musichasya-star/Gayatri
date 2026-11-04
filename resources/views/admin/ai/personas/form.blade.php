@@ -3,6 +3,7 @@
 @section('title', ($persona->exists ? 'Edit Persona' : 'Tambah Persona') . ' - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
     <x-ui.page-header eyebrow="AI Management" title="{{ $persona->exists ? 'Edit Persona' : 'Tambah Persona' }}" description="Pastikan prompt membatasi AI agar hanya menjawab layanan Gayatri.">
         <x-slot name="actions"><a class="button button-secondary" href="{{ route('admin.ai.personas.index') }}"><i data-lucide="arrow-left"></i> Kembali</a></x-slot>
     </x-ui.page-header>
@@ -12,7 +13,7 @@
     @endif
 
     <div class="card"><div class="card-body">
-        <form method="POST" action="{{ $persona->exists ? route('admin.ai.personas.update', $persona) : route('admin.ai.personas.store') }}" class="grid grid-2">
+        <form data-guard-unsaved method="POST" action="{{ $persona->exists ? route('admin.ai.personas.update', $persona) : route('admin.ai.personas.store') }}" class="grid grid-2">
             @csrf
             @if ($persona->exists) @method('PUT') @endif
             <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Nama</span><input class="input" name="name" value="{{ old('name', $persona->name) }}" required></label>

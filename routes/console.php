@@ -22,3 +22,8 @@ Artisan::command('crm:send-due-campaigns', function (CampaignService $campaignSe
 
 Schedule::command('crm:send-due-reminders')->everyMinute()->withoutOverlapping();
 Schedule::command('crm:send-due-campaigns')->everyMinute()->withoutOverlapping();
+Schedule::command('crm:send-birthday-greetings')->everyMinute()->timezone('Asia/Jakarta')->withoutOverlapping();
+Schedule::command('crm:send-rental-reminders')->everyMinute()->timezone('Asia/Jakarta')->withoutOverlapping();
+Schedule::command('crm:send-laundry-reminders')->hourly()->timezone('Asia/Jakarta')->withoutOverlapping();
+Schedule::command('ai:prune-lookups')->hourly()->withoutOverlapping();
+Schedule::command('ai:prune-decisions --apply')->dailyAt('03:15')->timezone('Asia/Jakarta')->withoutOverlapping();

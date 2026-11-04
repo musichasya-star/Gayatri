@@ -24,6 +24,9 @@ class AiAutomationExecutorService
 
     public function process(AiExtractedData $extractedData): ?AiAutomationLog
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            return app(AiInteractionPolicy::class)->blockAutomation($extractedData);
+        }
         $rule = $this->ruleService->matchingRule($extractedData);
 
         if (! $rule) {
@@ -35,6 +38,9 @@ class AiAutomationExecutorService
 
     public function processWithRule(AiExtractedData $extractedData, AiAutomationRule $rule): ?AiAutomationLog
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            return app(AiInteractionPolicy::class)->blockAutomation($extractedData, $rule);
+        }
         if (! $rule->is_active) {
             return $this->log($extractedData, $rule, 'skipped', null, null, 'Rule is not active.');
         }

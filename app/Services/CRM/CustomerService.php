@@ -7,10 +7,13 @@ use App\Models\AiAutomationLog;
 use App\Models\AiExtractedData;
 use App\Models\AiLog;
 use App\Models\Customer;
+use App\Models\LaundryPublicRequest;
+use App\Models\LaundryTransportTask;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CustomerService
 {
@@ -74,6 +77,25 @@ class CustomerService
 
     public function deleteWithRelations(Customer $customer, ?User $actor, Request $request): void
     {
+        DB::transaction(fn () => $this->deleteCustomer($customer, $actor, $request));
+    }
+
+    private function deleteCustomer(Customer $customer, ?User $actor, Request $request): void
+    {
+        $customer = Customer::whereKey($customer->id)->lockForUpdate()->firstOrFail();
+        abort_unless($actor?->status === 'active' && $actor->hasRole(['owner', 'manager']), 403);
+        if ($customer->bookings()->exists()) {
+            throw ValidationException::withMessages(['customer' => 'Customer memiliki riwayat booking. Gunakan Arsip untuk mempertahankan transaksi dan riwayat layanan.']);
+        }
+        if ($customer->laundryOrders()->exists() || LaundryTransportTask::where('customer_id', $customer->id)->exists() || LaundryPublicRequest::where('customer_id', $customer->id)->exists()) {
+            throw ValidationException::withMessages(['customer' => 'Customer memiliki riwayat laundry. Gunakan Arsip agar penerimaan dan penimbangan tetap tersimpan.']);
+        }
+        if ($customer->bookings()->whereHas('therapistFee')->exists()) {
+            throw ValidationException::withMessages(['customer' => 'Customer memiliki riwayat fee terapis. Gunakan Arsip agar jejak perhitungan tetap tersimpan.']);
+        }
+        if ($customer->rentalOrders()->exists()) {
+            throw ValidationException::withMessages(['customer' => 'Customer memiliki riwayat rental. Gunakan Arsip agar transaksi, kondisi unit, dan pencatatan deposit tetap tersimpan.']);
+        }
         $oldValues = $customer->fresh()->toArray();
 
         DB::transaction(function () use ($customer): void {

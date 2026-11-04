@@ -1,61 +1,92 @@
 @php
-    $seo = $page->seo_settings ?: [];
-    $theme = $page->theme_settings ?: [];
     $byType = $sections->keyBy('type');
+    $contact = $landing['contact'];
+    $about = $byType->get('about');
+    $gallery = app(\App\Services\Web\LandingContent::class)->gallery($byType->get('gallery'));
+    $faq = app(\App\Services\Web\LandingContent::class)->faq($byType->get('faq'));
+    $packages = $byType->has('packages') ? $services->filter(fn($service)=>$service->catalogueKind()==='package')->groupBy(fn($service)=>$service->service_group.'|'.$service->familyName())->take(3) : collect();
+    $navItems = [['Beranda','#home'],['Layanan','#services']];
+    if ($about) $navItems[] = ['Tentang','#about'];
+    if ($packages->isNotEmpty()) $navItems[] = ['Paket','#packages'];
+    if ($gallery->isNotEmpty()) $navItems[] = ['Galeri','#gallery'];
+    if ($faq->isNotEmpty()) $navItems[] = ['FAQ','#faq'];
+    $navItems[] = ['Kontak','#contact'];
 @endphp
 <!doctype html>
 <html lang="id">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $seo['meta_title'] ?? $page->site_name }}</title>
-    <meta name="description" content="{{ $seo['meta_description'] ?? '' }}">
-    <meta name="keywords" content="{{ $seo['keywords'] ?? '' }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root{--brown:{{ $theme['primary_color'] ?? '#7a4e2d' }};--gold:{{ $theme['accent_color'] ?? '#c9a227' }};--cream:{{ $theme['background_color'] ?? '#f8f3ea' }};--dark:#2f241d;--muted:#7b6a5a;--ivory:#fffdf7;--radius:{{ $theme['card_radius'] ?? '24px' }};--shadow:0 22px 60px rgba(74,44,26,.12)}
-        *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--dark);font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at 8% 0,rgba(201,162,39,.24),transparent 26rem),linear-gradient(135deg,var(--cream),#fffdf7 58%,#efe2d0)}a{text-decoration:none;color:inherit}img{max-width:100%}.landing-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem clamp(1rem,4vw,4rem);background:rgba(255,253,247,.78);backdrop-filter:blur(18px);border-bottom:1px solid rgba(216,195,165,.55)}.brand{display:flex;align-items:center;gap:.7rem;font-weight:800;color:var(--brown)}.brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:16px;background:linear-gradient(135deg,#e8d8a8,var(--gold));box-shadow:0 12px 24px rgba(201,162,39,.24)}.nav-links{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;color:var(--muted);font-weight:700}.btn{display:inline-flex;align-items:center;gap:.5rem;border:0;border-radius:999px;padding:.85rem 1.15rem;font-weight:800;cursor:pointer}.btn-primary{color:#fff;background:linear-gradient(135deg,var(--brown),#4a2c1a);box-shadow:0 16px 28px rgba(74,44,26,.2)}.btn-soft{color:var(--brown);background:rgba(232,216,168,.5)}.section{padding:clamp(3rem,7vw,6rem) clamp(1rem,4vw,4rem)}.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:2rem;align-items:center;min-height:78vh}.eyebrow{margin:0 0 .6rem;color:var(--gold);font-weight:900;letter-spacing:.13em;text-transform:uppercase;font-size:.78rem}.headline{margin:0;font-family:'Playfair Display',serif;font-size:clamp(2.5rem,6vw,5.6rem);line-height:.95;color:#4a2c1a}.section-title{margin:0;font-family:'Playfair Display',serif;font-size:clamp(2rem,4vw,3.4rem);color:#4a2c1a}.lead{color:var(--muted);line-height:1.8;font-size:1.05rem}.hero-card{position:relative;border-radius:2.2rem;overflow:hidden;box-shadow:var(--shadow);min-height:34rem;background:#d8c3a5}.hero-card img{width:100%;height:100%;min-height:34rem;object-fit:cover}.floating{position:absolute;left:1.2rem;right:1.2rem;bottom:1.2rem;border:1px solid rgba(255,255,255,.5);border-radius:1.4rem;padding:1rem;background:rgba(255,253,247,.86);backdrop-filter:blur(14px)}.grid{display:grid;gap:1rem}.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}.card{border:1px solid rgba(216,195,165,.72);border-radius:var(--radius);padding:1.3rem;background:rgba(255,253,247,.82);box-shadow:0 14px 36px rgba(74,44,26,.08)}.icon{display:grid;place-items:center;width:44px;height:44px;border-radius:16px;color:var(--brown);background:linear-gradient(135deg,#f3eadb,#e8d8a8)}.split{display:grid;grid-template-columns:.9fr 1.1fr;gap:2rem;align-items:center}.soft-panel{border-radius:2rem;padding:2rem;background:linear-gradient(135deg,rgba(122,78,45,.95),rgba(74,44,26,.96));color:#fff;box-shadow:var(--shadow)}.input{width:100%;min-height:48px;border:1px solid #d8c3a5;border-radius:16px;padding:.85rem 1rem;background:#fffdf7;color:var(--dark)}textarea.input{min-height:110px;resize:vertical}.gallery-img{width:100%;height:260px;object-fit:cover;border-radius:22px}.faq details{border:1px solid rgba(216,195,165,.75);border-radius:18px;padding:1rem;background:rgba(255,253,247,.75)}.faq summary{cursor:pointer;font-weight:800}.skeleton{position:relative;overflow:hidden;background:#efe2d0}.skeleton:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:shine 1.6s infinite}@keyframes shine{to{transform:translateX(100%)}}.footer{padding:2rem clamp(1rem,4vw,4rem);color:#fff;background:#4a2c1a}.mobile-only{display:none}@media(max-width:900px){.hero,.split,.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}.nav-links{display:none}.mobile-only{display:inline-flex}.section{padding:3rem 1rem}.hero{min-height:auto}.headline{font-size:3rem}.hero-card,.hero-card img{min-height:24rem}.landing-nav{align-items:flex-start}.card{padding:1rem}}
-    </style>
-</head>
-<body>
-    @if($nav = $byType->get('navigation'))
-        <nav class="landing-nav">
-            <a class="brand" href="#home"><span class="brand-mark"><i data-lucide="flower-2"></i></span>{{ $nav->content['logo_text'] ?? $page->site_name }}</a>
-            <div class="nav-links">@foreach(($nav->items ?: []) as $item)<a href="{{ $item['url'] ?? '#' }}">{{ $item['label'] ?? 'Menu' }}</a>@endforeach</div>
-            <a class="btn btn-primary" href="{{ route('landing.booking-page') }}"><i data-lucide="calendar-check"></i>{{ $nav->content['cta_label'] ?? 'Booking' }}</a>
-        </nav>
+    @include('partials.public-seo')
+    <link rel="preload" href="{{ asset('fonts/playfair-display-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ asset('css/gayatri-public.css') }}">
+    @if($landing['hero']['video'])
+        <link rel="stylesheet" href="{{ asset('css/gayatri-hero-video.css') }}">
+        <script src="{{ asset('js/gayatri-hero-video.js') }}" defer></script>
     @endif
-
-    @foreach($sections as $section)
-        @php($content = $section->content ?: [])
-        @php($items = $section->items ?: [])
-        @continue($section->type === 'navigation')
-
-        @if($section->type === 'hero')
-            <section class="section hero" id="home"><div><p class="eyebrow">{{ $section->subtitle }}</p><h1 class="headline">{{ $content['headline'] ?? $section->title }}</h1><p class="lead">{{ $content['description'] ?? '' }}</p><div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.2rem;"><a class="btn btn-primary" href="{{ route('landing.booking-page') }}">{{ $content['primary_button'] ?? 'Booking Online' }}</a><a class="btn btn-soft" href="#packages">{{ $content['secondary_button'] ?? 'Lihat Paket' }}</a></div></div><div class="hero-card skeleton"><img src="{{ $content['image_url'] ?? '' }}" alt="{{ $section->title }}" onload="this.parentElement.classList.remove('skeleton')"><div class="floating grid grid-3">@foreach($items as $item)<strong>{{ $item['label'] ?? '' }}</strong>@endforeach</div></div></section>
-        @elseif($section->type === 'about')
-            <section class="section split" id="about"><img class="gallery-img skeleton" style="height:420px;" src="{{ $content['image_url'] ?? '' }}" alt="About" onload="this.classList.remove('skeleton')"><div><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><p class="lead">{{ $content['description'] ?? '' }}</p><div class="grid grid-3">@foreach($items as $item)<div class="card"><strong>{{ $item['label'] ?? '' }}</strong></div>@endforeach</div></div></section>
-        @elseif($section->type === 'booking')
-            <section class="section" id="booking"><div class="split"><div><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><p class="lead">{{ $content['description'] ?? 'Isi form booking di halaman khusus yang lebih nyaman dan mobile friendly.' }}</p></div><div class="card"><div class="icon"><i data-lucide="calendar-check"></i></div><h3>Booking Online Khusus</h3><p class="lead">Request masuk ke dashboard CRM dengan status pending confirmation. Jika belum dikonfirmasi admin, Bunda bisa ubah jadwal dari session browser.</p><a class="btn btn-primary" href="{{ route('landing.booking-page') }}">Buka Halaman Booking</a></div></div></section>
-        @elseif($section->type === 'booking_inline_disabled')
-            <section class="section" id="booking"><div class="split"><div><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><p class="lead">{{ $content['description'] ?? '' }}</p>@if(session('booking_status'))<div class="card" style="border-color:#8fae8b;color:#3f6d3d;">{{ session('booking_status') }}</div>@endif @if($errors->any())<div class="card" style="border-color:#c97a6a;color:#7a3228;">{{ $errors->first() }}</div>@endif</div><form class="card grid grid-2" method="POST" action="{{ route('landing.booking') }}">@csrf<input class="input" name="name" value="{{ old('name') }}" placeholder="Nama Bunda" required><input class="input" name="phone" value="{{ old('phone') }}" placeholder="WhatsApp" required><input class="input" type="email" name="email" value="{{ old('email') }}" placeholder="Email"><input class="input" name="baby_name" value="{{ old('baby_name') }}" placeholder="Nama bayi/anak"><select class="input" name="service_id" required><option value="">Pilih layanan</option>@foreach($services as $service)<option value="{{ $service->id }}" @selected(old('service_id')==$service->id)>{{ $service->name }} - Rp {{ number_format((float)$service->price,0,',','.') }}</option>@endforeach</select><select class="input" name="branch_id"><option value="">Pilih cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" @selected(old('branch_id')==$branch->id)>{{ $branch->name }}</option>@endforeach</select><input class="input" type="date" name="booking_date" value="{{ old('booking_date', now()->addDay()->toDateString()) }}" required><input class="input" type="time" name="start_time" value="{{ old('start_time', '10:00') }}" required><textarea class="input" name="notes" placeholder="Catatan" style="grid-column:1/-1;">{{ old('notes') }}</textarea><button class="btn btn-primary" type="submit" style="grid-column:1/-1;justify-content:center;"><i data-lucide="send"></i> Kirim Request Booking</button></form></div></section>
-        @elseif($section->type === 'promo' || $section->type === 'final_cta')
-            <section class="section"><div class="soft-panel"><p class="eyebrow">{{ $content['badge'] ?? $section->subtitle }}</p><h2 class="section-title" style="color:#fff;">{{ $content['headline'] ?? $section->title }}</h2><p style="line-height:1.8;color:rgba(255,255,255,.78);">{{ $content['description'] ?? '' }}</p><a class="btn btn-soft" href="{{ route('landing.booking-page') }}">{{ $content['button'] ?? 'Booking Sekarang' }}</a></div></section>
-        @elseif($section->type === 'gallery')
-            <section class="section" id="gallery"><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><div class="grid grid-3" style="margin-top:1.4rem;">@foreach($items as $item)<img class="gallery-img skeleton" src="{{ $item['image_url'] ?? '' }}" alt="{{ $item['title'] ?? 'Gallery' }}" onload="this.classList.remove('skeleton')">@endforeach</div></section>
-        @elseif($section->type === 'faq')
-            <section class="section faq" id="faq"><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><div class="grid" style="margin-top:1.4rem;">@foreach($items as $item)<details><summary>{{ $item['title'] ?? 'FAQ' }}</summary><p class="lead">{{ $item['description'] ?? '' }}</p></details>@endforeach</div></section>
-        @elseif($section->type === 'location_contact')
-            <section class="section split" id="contact"><div><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><p class="lead">{{ $content['address'] ?? '' }}<br>{{ $content['phone'] ?? '' }}<br>WA {{ $content['whatsapp'] ?? '' }}</p><a class="btn btn-primary" href="{{ $content['maps_url'] ?? '#' }}">Buka Maps</a></div><div class="grid">@foreach($items as $item)<div class="card"><i data-lucide="map-pin"></i> {{ $item['label'] ?? '' }}</div>@endforeach</div></section>
-        @elseif($section->type === 'footer')
-            <footer class="footer"><div class="grid grid-3"><div><h3>{{ $page->site_name }}</h3><p>{{ $content['description'] ?? '' }}</p></div><div>@foreach($items as $item)<a style="display:block;margin:.5rem 0;" href="{{ $item['url'] ?? '#' }}">{{ $item['label'] ?? '' }}</a>@endforeach</div><div>{{ $content['copyright'] ?? '' }}</div></div></footer>
-        @else
-            <section class="section" id="{{ $section->type === 'services' ? 'services' : ($section->type === 'packages' ? 'packages' : $section->type) }}"><p class="eyebrow">{{ $section->subtitle }}</p><h2 class="section-title">{{ $content['headline'] ?? $section->title }}</h2><div class="grid grid-3" style="margin-top:1.4rem;">@foreach($items as $item)<div class="card"><div class="icon"><i data-lucide="{{ $item['icon'] ?? $section->icon ?? 'sparkles' }}"></i></div><h3>{{ $item['title'] ?? $item['label'] ?? $item['name'] ?? '' }}</h3><p class="lead">{{ $item['description'] ?? '' }}</p>@if(!empty($item['price']))<strong style="color:var(--brown);">{{ $item['price'] }}</strong>@endif @if(!empty($item['rating']))<p style="color:var(--gold);font-weight:900;">★★★★★</p>@endif</div>@endforeach</div></section>
-        @endif
+    <script src="{{ asset('js/gayatri-public.js') }}" defer></script>
+</head>
+<body class="g-public">
+<a class="gp-skip" href="#main-content">Lewati ke isi halaman</a>
+<header class="gp-header" data-public-header>
+    <div class="gp-container gp-header-inner">
+        <a class="gp-brand" href="#home" aria-label="Gayatri — Beranda"><x-public.icon name="flower"/><span><strong>GAYATRI</strong><small>Mom &amp; Baby Care</small></span></a>
+        <nav class="gp-navigation" aria-label="Menu utama">@foreach($navItems as [$label,$href])<a href="{{ $href }}">{{ $label }}</a>@endforeach</nav>
+        <div class="gp-header-actions"><a class="gp-button gp-button-primary gp-header-cta" href="#services">Pilih layanan<x-public.icon name="arrow"/></a><button class="gp-menu-toggle" type="button" data-menu-toggle aria-label="Buka menu" aria-controls="public-menu" aria-expanded="false" aria-haspopup="dialog"><x-public.icon name="menu"/></button></div>
+    </div>
+</header>
+<dialog class="gp-menu" id="public-menu" aria-labelledby="public-menu-title">
+    <div class="gp-menu-top"><strong id="public-menu-title">Jelajahi Gayatri</strong><button class="gp-menu-close" type="button" data-menu-close aria-label="Tutup menu"><x-public.icon name="close"/></button></div>
+    <nav aria-label="Menu ponsel">@foreach($navItems as [$label,$href])<a href="{{ $href }}">{{ $label }}<x-public.icon name="arrow"/></a>@endforeach</nav>
+    <p>Perawatan dan kebutuhan keluarga, dalam pilihan layanan yang terpisah.</p>
+    <a class="gp-button gp-button-primary" href="{{ route('catalogue.index') }}">Lihat katalog lengkap<x-public.icon name="arrow"/></a>
+</dialog>
+<main id="main-content" tabindex="-1">
+    @if($landing['hero']['video'])
+        @include('landing.partials.hero-video')
+    @else
+    <section class="gp-hero" id="home" aria-labelledby="hero-title">
+        <div class="gp-container gp-hero-grid">
+            <div class="gp-hero-copy"><p class="gp-eyebrow"><span></span>GAYATRI · MOM &amp; BABY CARE</p><h1 id="hero-title">{{ $landing['hero']['headline'] }}</h1><p class="gp-lead">{{ $landing['hero']['description'] }}</p><div class="gp-actions"><a class="gp-button gp-button-primary" href="#services">Temukan layanan<x-public.icon name="arrow"/></a><a class="gp-button gp-button-outline" href="{{ route('catalogue.index') }}">Jelajahi katalog</a></div><p class="gp-hero-note"><x-public.icon name="heart"/>Pilihan untuk setiap tahap keluarga Bunda.</p></div>
+            <figure class="gp-hero-art"><img src="{{ $landing['hero']['image'] }}" alt="{{ $landing['hero']['alt'] }}" @if($landing['hero']['srcset']) srcset="{{ $landing['hero']['srcset'] }}" sizes="(min-width: 1000px) 640px, (min-width: 701px) 50vw, 100vw" @endif width="1536" height="1024" fetchpriority="high" decoding="async">@if($landing['hero']['illustration'])<figcaption>{{ $landing['hero']['caption'] }}</figcaption>@endif<div class="gp-hero-seal" aria-hidden="true"><x-public.icon name="flower"/><span>Untuk Bunda<br>&amp; si kecil</span></div></figure>
+        </div>
+    </section>
+    @endif
+    <div class="gp-reassurance"><div class="gp-container"><span><x-public.icon name="flower"/>Layanan sesuai kebutuhan</span><span><x-public.icon name="calendar"/>Jadwal dikonfirmasi tim</span><span><x-public.icon name="chat"/>Bantuan dari admin Gayatri</span></div></div>
+    @include('landing.partials.home-services')
+    @include('landing.partials.home-featured')
+    @if($about)
+    <section class="gp-section gp-about" id="about" aria-labelledby="about-title"><div class="gp-container gp-split">
+        @php
+            $aboutImage = \App\Services\Web\LandingPresentation::url($about->content['image_url'] ?? '');
+            $aboutIllustrated = !$aboutImage || str_contains($aboutImage,'images.unsplash.com');
+            $aboutPhoto = \App\Services\Web\LandingContent::image('lactation');
+            if ($aboutIllustrated) $aboutImage = $aboutPhoto['image_url'];
+            $aboutHeadline = $about->content['headline'] ?? '';
+            if (!$aboutHeadline || $aboutHeadline==='Spa keluarga dengan standar pelayanan profesional') $aboutHeadline='Perhatian untuk setiap tahap keluarga.';
+        @endphp
+        @if($aboutImage)<figure class="gp-about-image"><img src="{{ $aboutImage }}" alt="{{ $aboutIllustrated ? $aboutPhoto['alt'] : ($about->content['image_alt'] ?? 'Gambar layanan Gayatri') }}" @if($aboutIllustrated) srcset="{{ $aboutPhoto['srcset'] }}" sizes="(min-width: 1000px) 550px, (min-width: 701px) 50vw, 100vw" @endif loading="lazy" decoding="async" width="720" height="540">@if($aboutIllustrated)<figcaption>Ilustrasi foto · AI</figcaption>@endif</figure>@endif
+        <div><p class="gp-eyebrow">KENALI GAYATRI</p><h2 class="gp-heading" id="about-title">{{ $aboutHeadline }}</h2><p class="gp-lead">{{ $about->content['description'] ?? 'Temukan pilihan perawatan dan kebutuhan keluarga, lalu rencanakan kunjungan bersama tim Gayatri.' }}</p><ul class="gp-check-list"><li><x-public.icon name="check"/>Pilihan layanan ibu dan anak</li><li><x-public.icon name="check"/>Pemesanan melalui halaman layanan masing-masing</li><li><x-public.icon name="check"/>Rincian dikonfirmasi sebelum pelayanan</li></ul><a class="gp-text-link" href="#contact">Kenali layanan bersama tim kami<x-public.icon name="arrow"/></a></div>
+    </div></section>
+    @endif
+    @if($packages->isNotEmpty())
+    <section class="gp-section gp-packages" id="packages" aria-labelledby="packages-title"><div class="gp-container"><div class="gp-section-heading"><p class="gp-eyebrow">PAKET PERAWATAN</p><h2 class="gp-heading" id="packages-title">Pilihan yang bisa direncanakan bersama.</h2><p>Kenali isi dan variasi paket. Jumlah sesi serta jadwal dikonfirmasi oleh admin.</p></div><div class="gp-three-grid">
+    @foreach($packages as $variants)@php($package=$variants->first())<article class="gp-package"><x-public.icon name="flower"/><span class="gp-tag">Konfirmasi admin</span><h3>{{ $package->familyName() }}</h3><p>{{ $variants->count() }} pilihan · {{ $package->groupLabel() }}</p>@php($minimum=$variants->whereNotNull('price')->min('price'))<strong>{{ $minimum !== null ? 'Mulai Rp '.number_format((float)$minimum,0,',','.') : 'Harga dikonfirmasi admin' }}</strong><a class="gp-button gp-button-outline" href="{{ route('catalogue.index',['group'=>$package->service_group,'search'=>$package->familyName()]) }}">Lihat pilihan paket<x-public.icon name="arrow"/></a></article>@endforeach
+    </div></div></section>
+    @endif
+    @include('landing.partials.home-rental')
+    <section class="gp-section gp-how" id="how_to_book" aria-labelledby="how-title"><div class="gp-container"><div class="gp-section-heading"><p class="gp-eyebrow">PEMESANAN</p><h2 class="gp-heading" id="how-title">Mulai dengan tiga langkah sederhana.</h2></div><ol class="gp-steps"><li><span>01</span><div><h3>Pilih layanan</h3><p>Temukan treatment, pendampingan, perlengkapan sewa, atau laundry.</p></div></li><li><span>02</span><div><h3>Lengkapi pilihan</h3><p>Tentukan rincian dan jadwal yang tersedia pada halaman layanan.</p></div></li><li><span>03</span><div><h3>Tunggu konfirmasi</h3><p>Tim memeriksa permintaan. Ikuti rincian pembayaran manual setelah dikonfirmasi.</p></div></li></ol></div></section>
+    @if($gallery->isNotEmpty())
+    <section class="gp-section gp-gallery" id="gallery" aria-labelledby="gallery-title"><div class="gp-container"><div class="gp-section-heading"><p class="gp-eyebrow">GALERI</p><h2 class="gp-heading" id="gallery-title">Nuansa hangat, perhatian yang dekat.</h2></div>@if($gallery->contains('illustration',true))<p class="gp-gallery-context">{{ $gallery->every(fn($item)=>$item['illustration']) ? 'Gambaran layanan melalui ilustrasi foto AI, bukan dokumentasi outlet atau tim Gayatri.' : 'Gambar ilustrasi diberi keterangan pada masing-masing foto.' }}</p>@endif<div class="gp-gallery-grid">@foreach($gallery as $item)<figure><img src="{{ $item['image_url'] }}" alt="{{ $item['alt'] }}" @if($item['srcset']) srcset="{{ $item['srcset'] }}" sizes="(min-width: 1000px) 300px, (min-width: 600px) 50vw, 100vw" @endif width="960" height="640" loading="lazy" decoding="async"><figcaption>{{ $item['title'] }}@if($item['caption'])<span>{{ $item['caption'] }}</span>@endif</figcaption></figure>@endforeach</div></div></section>
+    @endif
+    @foreach($sections->whereNotIn('type',['navigation','hero','services','about','packages','promo','booking','booking_inline_disabled','how_to_book','why_choose_us','benefits','gallery','testimonials','faq','location_contact','final_cta','footer']) as $section)
+    <section class="gp-section" id="{{ \Illuminate\Support\Str::slug($section->type) }}"><div class="gp-container"><p class="gp-eyebrow">{{ $section->subtitle }}</p><h2 class="gp-heading">{{ $section->content['headline'] ?? $section->title }}</h2><p class="gp-lead">{{ $section->content['description'] ?? '' }}</p>@foreach($section->items ?: [] as $item)<article class="gp-card"><h3>{{ $item['title'] ?? $item['label'] ?? '' }}</h3><p>{{ $item['description'] ?? '' }}</p></article>@endforeach</div></section>
     @endforeach
-
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script><script>if(window.lucide){window.lucide.createIcons()}</script>
+    @if($faq->isNotEmpty())
+    <section class="gp-section gp-faq" id="faq" aria-labelledby="faq-title"><div class="gp-container gp-faq-layout"><div><p class="gp-eyebrow">FAQ</p><h2 class="gp-heading" id="faq-title">Yang sering<br>ditanyakan.</h2><p>Masih ada yang ingin ditanyakan? Tim Gayatri siap membantu.</p>@if($contact['whatsapp'])<a class="gp-text-link" href="{{ $contact['whatsapp'] }}">Tanya admin<x-public.icon name="arrow"/></a>@endif</div><div class="gp-faq-list">@foreach($faq as $item)<details name="gayatri-faq"><summary>{{ $item['title'] ?? 'Informasi layanan' }}<x-public.icon name="plus"/></summary><p>{{ $item['description'] ?? '' }}</p></details>@endforeach</div></div></section>
+    @endif
+    <section class="gp-section gp-contact" id="contact" aria-labelledby="contact-title"><div class="gp-container"><div class="gp-contact-panel" id="booking"><div><p class="gp-eyebrow">RENCANAKAN BERSAMA GAYATRI</p><h2 class="gp-heading" id="contact-title">Kebutuhan Bunda,<br>kami bantu arahkan.</h2><p>Pilih layanan yang sesuai atau tanyakan rinciannya kepada tim kami sebelum memesan.</p><div class="gp-actions"><a class="gp-button gp-button-light" href="#services">Pilih layanan<x-public.icon name="arrow"/></a>@if($contact['whatsapp'])<a class="gp-button gp-button-on-dark" href="{{ $contact['whatsapp'] }}"><x-public.icon name="chat"/>Tanya lewat WhatsApp</a>@endif</div></div><div class="gp-contact-details"><x-public.icon name="pin"/><h3>Informasi kunjungan</h3><p>{{ $contact['address'] ?: 'Lokasi kunjungan dikonfirmasi sesuai layanan yang Bunda pilih.' }}</p>@if($contact['hours'])<p>{{ $contact['hours'] }}</p>@endif @if($contact['maps'])<a class="gp-text-link" href="{{ $contact['maps'] }}">Cari lokasi di Maps<x-public.icon name="arrow"/></a>@else<p class="gp-small">Lihat pilihan jadwal pada halaman pemesanan masing-masing layanan.</p>@endif</div></div></div></section>
+</main>
+<footer class="gp-footer"><div class="gp-container"><div class="gp-footer-grid"><div><a class="gp-brand" href="#home"><x-public.icon name="flower"/><span><strong>GAYATRI</strong><small>Mom &amp; Baby Care</small></span></a><p>{{ $page->site_name }}<br>Perawatan dan kebutuhan keluarga Bunda.</p></div><nav aria-label="Layanan Gayatri"><h2>Layanan</h2><a href="{{ route('landing.booking-page',['service_group'=>'spa']) }}">Pijat &amp; Spa</a><a href="{{ route('landing.booking-page',['service_group'=>'lactation']) }}">Laktasi &amp; ASI</a><a href="{{ route('rental.index') }}">Sewa Alat Bayi</a><a href="{{ route('laundry.index') }}">{{ $landing['laundryOpen'] ? 'Pesan Laundry' : 'Informasi Laundry' }}</a></nav><nav aria-label="Jelajahi Gayatri"><h2>Jelajahi</h2><a href="{{ route('catalogue.index') }}">Katalog lengkap</a><a href="{{ route('rental.cart.index') }}">Keranjang sewa</a><a href="#contact">Hubungi kami</a>@if($contact['instagram'])<a href="{{ $contact['instagram'] }}">Instagram</a>@endif @if($contact['whatsapp'])<a href="{{ $contact['whatsapp'] }}">WhatsApp</a>@endif</nav></div><div class="gp-footer-bottom"><small>© {{ date('Y') }} {{ $page->site_name }}</small><a href="{{ route('login') }}">Akses staf</a></div></div></footer>
 </body>
 </html>

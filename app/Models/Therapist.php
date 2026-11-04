@@ -21,6 +21,11 @@ class Therapist extends Model
         'notes',
     ];
 
+    protected function casts(): array
+    {
+        return ['fee_spa_percent' => 'decimal:2', 'fee_lactation_percent' => 'decimal:2'];
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

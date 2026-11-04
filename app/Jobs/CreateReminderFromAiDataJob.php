@@ -7,6 +7,7 @@ use App\Models\AiExtractedData;
 use App\Models\Booking;
 use App\Models\Reminder;
 use App\Services\AI\AiAutomationRuleService;
+use App\Services\AI\AiInteractionPolicy;
 use App\Support\ReminderStatus;
 use App\Support\ReminderType;
 use Carbon\Carbon;
@@ -27,6 +28,9 @@ class CreateReminderFromAiDataJob implements ShouldQueue
             return;
         }
 
+        if (app(AiInteractionPolicy::class)->blockLegacyJob($extractedData)) {
+            return;
+        }
         $rule = $this->resolveRule($extractedData, $ruleService);
 
         if (! $rule || $rule->target_entity !== 'reminder') {
@@ -156,6 +160,6 @@ class CreateReminderFromAiDataJob implements ShouldQueue
             ?: data_get($extractedData->raw_ai_response, 'followup.reason')
             ?: 'Follow-up dari AI Automation.');
 
-        return trim(($reason ?: 'Follow-up dari AI Automation.') . ' Untuk Bunda '.$extractedData->customer?->name .'.');
+        return trim(($reason ?: 'Follow-up dari AI Automation.').' Untuk Bunda '.$extractedData->customer?->name.'.');
     }
 }

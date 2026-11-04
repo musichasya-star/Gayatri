@@ -125,7 +125,7 @@ class DashboardReportingTest extends TestCase
             ->get(route('admin.reports.index', $params))
             ->assertOk()
             ->assertSee('Reporting &amp; Analytics', false)
-            ->assertSee('Revenue');
+            ->assertSee('Tagihan Booking');
 
         $this->actingAs($admin)
             ->get(route('admin.reports.show', ['type' => 'bookings'] + $params))
@@ -143,8 +143,8 @@ class DashboardReportingTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('text/csv', $response->headers->get('content-type'));
-        $this->assertStringContainsString('"Net"', $response->getContent());
-        $this->assertStringContainsString('"225000"', $response->getContent());
+        $this->assertStringContainsString('"Net"', $response->streamedContent());
+        $this->assertStringContainsString('"225000"', $response->streamedContent());
     }
 
     public function test_sales_can_access_campaign_and_followup_reports(): void

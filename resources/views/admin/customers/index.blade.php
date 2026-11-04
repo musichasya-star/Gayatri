@@ -3,6 +3,7 @@
 @section('title', 'Customers - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
     <x-ui.page-header
         eyebrow="CRM Master Data"
         title="Customer"
@@ -22,23 +23,17 @@
 
     <div class="card" style="margin-bottom: 1rem;">
         <div class="card-body">
-            <form method="POST" action="{{ route('admin.customers.import') }}" enctype="multipart/form-data" class="grid grid-4" style="margin-bottom: 1rem;">
-                @csrf
-                <input class="input" type="file" name="csv_file" accept=".csv,text/csv">
-                <div class="muted" style="align-self: center;">Header: `name,branch_code,phone,whatsapp_number,email,city,status,tags,notes`</div>
-                <div></div>
-                <button class="button button-secondary" type="submit"><i data-lucide="upload"></i> Import CSV</button>
-            </form>
 
-            <form method="GET" action="{{ route('admin.customers.index') }}" class="grid grid-4">
-                <input class="input" type="search" name="search" value="{{ request('search') }}" placeholder="Cari nama, telepon, WhatsApp, email">
-                <select class="input" name="status">
+
+            <form method="GET" action="{{ route('admin.customers.index') }}" class="ops-filters">
+                <label>Cari pelanggan<input class="input" type="search" name="search" maxlength="150" value="{{ request('search') }}" placeholder="Cari nama, telepon, WhatsApp, email"></label>
+                <label>Status pelanggan<select class="input" name="status">
                     <option value="">Semua status</option>
                     @foreach ($statuses as $status)
                         <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
                     @endforeach
-                </select>
-                <input class="input" type="text" name="tag" value="{{ request('tag') }}" placeholder="Filter tag, contoh: baby-spa">
+                </select></label>
+                <label>Tag<input class="input" type="text" name="tag" maxlength="100" value="{{ request('tag') }}" placeholder="Filter tag, contoh: baby-spa"></label>
                 <button class="button button-secondary" type="submit"><i data-lucide="search"></i> Filter</button>
             </form>
         </div>
@@ -53,7 +48,6 @@
                         <th>Nama</th>
                         <th>Cabang</th>
                         <th>WhatsApp</th>
-                        <th>Telepon</th>
                         <th>Status</th>
                         <th>Tag</th>
                         <th>Interaksi Terakhir</th>
@@ -73,32 +67,37 @@
                                 @if($customer->normalized_whatsapp_number)
                                     <br><span class="muted">{{ $customer->normalized_whatsapp_number }}</span>
                                 @endif
+                                @if($customer->phone && $customer->phone !== $customer->normalized_whatsapp_number)
+                                    <span class="ops-subtitle">Telepon: {{ $customer->phone }}</span>
+                                @endif
                             </td>
-                            <td data-label="Telepon">{{ $customer->phone ?: '-' }}</td>
+
                             <td data-label="Status"><span class="badge badge-brown">{{ ucfirst(str_replace('_', ' ', $customer->status)) }}</span></td>
                             <td data-label="Tag">{{ filled($customer->tags) ? implode(', ', $customer->tags) : '-' }}</td>
                             <td data-label="Interaksi Terakhir">{{ $customer->last_interaction_at?->format('d M Y H:i') ?: '-' }}</td>
                             <td data-label="Aksi">
                                 <div style="display: flex; gap: .4rem; flex-wrap: wrap;">
-                                    <a class="button button-secondary" href="{{ route('admin.customers.show', $customer) }}">Detail</a>
-                                    <a class="button button-ghost" href="{{ route('admin.customers.edit', $customer) }}">Edit</a>
-                                    @if ($customer->status !== 'inactive')
+                                    <a class="button button-secondary" href="{{ route('admin.customers.show',array_merge(['customer'=>$customer],\App\Support\AdminReviewContext::carry(request(),'customers'))) }}">Detail</a>
+                                    <a class="button button-ghost" href="{{ route('admin.customers.edit',array_merge(['customer'=>$customer],\App\Support\AdminReviewContext::carry(request(),'customers'))) }}">Edit</a>
+<details><summary>Arsip & tindakan lainnya</summary><div class="ops-actions">                                    @if ($customer->status !== 'inactive')
                                         <form method="POST" action="{{ route('admin.customers.archive', $customer) }}">
-                                            @csrf
+                                            @csrf @include('partials.admin-review-fields',['reviewModule'=>'customers'])
                                             <button class="button button-ghost" type="submit">Arsipkan</button>
                                         </form>
                                     @endif
-                                    <form method="POST" action="{{ route('admin.customers.destroy', $customer) }}" onsubmit="return confirm('Hapus customer {{ $customer->name }} beserta history chat, booking, follow-up, reminder, feedback, campaign recipient, dan data AI terkait? Tindakan ini tidak bisa dibatalkan.');">
-                                        @csrf
+                                    @if(auth()->user()->hasRole(['owner','manager']))
+                                    <form method="POST" action="{{ route('admin.customers.destroy', $customer) }}" onsubmit="return confirm('Hapus permanen customer dan riwayat interaksinya? Customer dengan riwayat transaksi harus diarsipkan. Tindakan ini tidak bisa dibatalkan.');">
+                                        @csrf @include('partials.admin-review-fields',['reviewModule'=>'customers'])
                                         @method('DELETE')
                                         <button class="button button-ghost" type="submit"><i data-lucide="trash"></i> Hapus</button>
                                     </form>
-                                </div>
+                                    @endif
+</div></details>                                </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 2rem;">Belum ada customer yang sesuai filter.</td>
+                            <td colspan="7" style="text-align: center; padding: 2rem;">Belum ada customer yang sesuai filter.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -115,4 +114,11 @@
             </div>
         </div>
     </div>
+<details class="ops-section" id="impor-pelanggan" @if($errors->hasAny(['csv_file','confirmed_updates'])) open @endif><summary>Impor pelanggan dari CSV</summary><div class="ops-section-body">            <form method="POST" action="{{ route('admin.customers.import') }}" enctype="multipart/form-data" class="ops-filters" style="margin-bottom: 1rem;">
+                @csrf @include('partials.admin-review-fields',['reviewModule'=>'customers'])
+                <label>Berkas pelanggan (CSV)<input class="input" type="file" name="csv_file" accept=".csv,text/csv" required></label><p class="muted">Pelanggan dengan nomor yang sudah ada dilewati secara default.</p>@if(auth()->user()->hasRole(['owner','manager']))<label><input type="checkbox" name="update_existing" value="1"> Perbarui kolom terisi dari pelanggan lama</label><label><input type="checkbox" name="confirmed_updates" value="1"> Isi berkas sudah diperiksa; riwayat catatan dan status lama tetap dipertahankan.</label>@endif
+                <div class="muted" style="align-self: center;">Header: <code>name,branch_code,phone,whatsapp_number,email,city,status,tags,notes</code></div>
+                <div></div>
+                <button class="button button-secondary" type="submit"><i data-lucide="upload"></i> Import CSV</button>
+            </form></div></details>
 @endsection

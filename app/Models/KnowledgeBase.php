@@ -21,6 +21,7 @@ class KnowledgeBase extends Model
         'valid_from',
         'valid_until',
         'meta',
+        'publication_status', 'audience', 'reviewed_by', 'reviewed_at', 'revision', 'is_demo',
     ];
 
     protected function casts(): array
@@ -29,12 +30,20 @@ class KnowledgeBase extends Model
             'valid_from' => 'datetime',
             'valid_until' => 'datetime',
             'meta' => 'array',
+            'reviewed_at' => 'datetime',
+            'revision' => 'integer',
+            'is_demo' => 'boolean',
         ];
     }
 
     public function chunks(): HasMany
     {
         return $this->hasMany(KnowledgeChunk::class);
+    }
+
+    public function domains(): HasMany
+    {
+        return $this->hasMany(KnowledgeDomain::class);
     }
 
     public function aiLogs(): HasMany

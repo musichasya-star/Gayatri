@@ -7,11 +7,12 @@ use App\Models\Booking;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Reminder;
-use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\WhatsAppGateway;
 use App\Support\BookingStatus;
 use App\Support\ReminderStatus;
 use App\Support\ReminderType;
 use Carbon\Carbon;
+use Illuminate\Validation\ValidationException;
 
 class ReminderService
 {
@@ -59,13 +60,17 @@ class ReminderService
 
     public function retry(Reminder $reminder): void
     {
+        $reminder->refresh();
+        if ($reminder->status !== ReminderStatus::FAILED || $reminder->sent_at || $reminder->message_id || data_get($reminder->payload, 'gateway_message_id')) {
+            throw ValidationException::withMessages(['reminder' => 'Hanya kegagalan yang pasti belum terkirim dapat dicoba ulang. Periksa WhatsApp untuk hasil yang belum pasti.']);
+        }
         $reminder->update([
             'status' => ReminderStatus::SCHEDULED,
             'scheduled_at' => now(),
             'failed_reason' => null,
         ]);
 
-        (new SendBookingReminderJob($reminder->id))->handle(app(WahaService::class));
+        (new SendBookingReminderJob($reminder->id))->handle(app(WhatsAppGateway::class));
     }
 
     public function cancel(Reminder $reminder): void
@@ -77,13 +82,17 @@ class ReminderService
 
     public function sendNow(Reminder $reminder): void
     {
+        $reminder->refresh();
+        if (! in_array($reminder->status, [ReminderStatus::PENDING, ReminderStatus::SCHEDULED], true) || $reminder->sent_at || $reminder->message_id || data_get($reminder->payload, 'gateway_message_id')) {
+            throw ValidationException::withMessages(['reminder' => 'Reminder sudah diproses. Pengiriman ulang dikunci.']);
+        }
         $reminder->update([
             'status' => ReminderStatus::SCHEDULED,
             'scheduled_at' => now(),
             'failed_reason' => null,
         ]);
 
-        (new SendBookingReminderJob($reminder->id))->handle(app(WahaService::class), $this);
+        (new SendBookingReminderJob($reminder->id))->handle(app(WhatsAppGateway::class), $this);
     }
 
     public function createManual(array $data): Reminder
@@ -116,6 +125,9 @@ class ReminderService
         }
 
         $booking = $reminder->booking;
+        if ($booking?->service_mode === 'home' && in_array($reminder->type, [ReminderType::H1, ReminderType::H0], true)) {
+            return 'Halo Bunda '.$reminder->customer?->name.', pengingat Home Service '.$booking->service?->name.' pada '.$booking->booking_date?->format('d M Y').' pukul '.substr((string) $booking->start_time, 0, 5).'. Terapis kami akan datang ke '.$booking->visit_address.'. Mohon pastikan alamat dan akses rumah sudah sesuai. '.$booking->navigationUrl();
+        }
 
         return match ($reminder->type) {
             ReminderType::H1 => sprintf(

@@ -11,7 +11,7 @@ class EnsureUserIsActive
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->status !== 'active') {
+        if ($request->user()?->status !== 'active' || ($request->session()->has('auth_version') && (int) $request->session()->get('auth_version') !== (int) $request->user()->auth_version)) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -20,6 +20,8 @@ class EnsureUserIsActive
                 'email' => 'Akun tidak aktif. Silakan hubungi owner atau manager.',
             ]);
         }
+
+        $request->session()->put('auth_version', (int) $request->user()->auth_version);
 
         return $next($request);
     }

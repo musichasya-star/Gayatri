@@ -6,6 +6,7 @@ use App\Models\AiAutomationRule;
 use App\Models\AiExtractedData;
 use App\Services\AI\AiAutomationExecutorService;
 use App\Services\AI\AiAutomationRuleService;
+use App\Services\AI\AiInteractionPolicy;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -23,6 +24,9 @@ class CreateCustomerFromAiDataJob implements ShouldQueue
             return;
         }
 
+        if (app(AiInteractionPolicy::class)->blockLegacyJob($extractedData)) {
+            return;
+        }
         $rule = $this->resolveRule($extractedData, $ruleService);
 
         if (! $rule || $rule->target_entity !== 'customer' || $rule->action !== 'create_customer') {

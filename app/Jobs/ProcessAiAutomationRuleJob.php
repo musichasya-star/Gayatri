@@ -6,6 +6,7 @@ use App\Models\AiAutomationRule;
 use App\Models\AiExtractedData;
 use App\Services\AI\AiAutomationExecutorService;
 use App\Services\AI\AiAutomationRuleService;
+use App\Services\AI\AiInteractionPolicy;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -23,6 +24,9 @@ class ProcessAiAutomationRuleJob implements ShouldQueue
             return;
         }
 
+        if (app(AiInteractionPolicy::class)->blockLegacyJob($extractedData)) {
+            return;
+        }
         $rule = $ruleService->matchingRule($extractedData);
 
         if (! $rule) {

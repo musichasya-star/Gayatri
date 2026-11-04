@@ -2,25 +2,27 @@
 
 namespace App\Http\Controllers\Admin;
 
-use Carbon\Carbon;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Followup;
 use App\Models\User;
 use App\Services\CRM\RetentionService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use InvalidArgumentException;
 
 class FollowupController extends Controller
 {
     public function index(Request $request): View
     {
+        $request->validate(['due' => ['nullable', 'in:today'], 'q' => ['nullable', 'string', 'max:150'], 'status' => ['nullable', 'in:open,sent,completed'], 'priority' => ['nullable', 'in:normal,high'], 'page' => ['nullable', 'integer', 'min:1']]);
         $followups = Followup::query()
             ->with(['customer', 'assignedUser', 'conversation'])
+            ->when($request->input('due') === 'today', fn ($q) => $q->where('due_at', '<', today()->addDay())->whereHas('customer', fn ($c) => $c->where('name', 'not like', '[DEMO]%')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
             ->when($request->filled('priority'), fn ($query) => $query->where('priority', $request->string('priority')))
             ->when($request->filled('q'), function ($query) use ($request) {

@@ -7,6 +7,7 @@ use App\Jobs\ProcessIncomingWhatsAppMessageJob;
 use App\Models\CampaignRecipient;
 use App\Models\Message;
 use App\Models\WhatsAppSession;
+use App\Services\WhatsApp\GatewayConfig;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
@@ -23,21 +24,24 @@ class WahaWebhookController extends Controller
         $payload = (array) $request->input('payload', []);
 
         if (in_array($event, ['message', 'message.any'], true) && ! ($payload['fromMe'] ?? false) && $this->isDirectCustomerChat($payload)) {
-            Bus::dispatch(new ProcessIncomingWhatsAppMessageJob($request->all()));
+            $eventData = $request->all();
+            $eventData['_gayatri_gateway'] = ['provider' => GatewayConfig::provider(),
+                'session' => (string) $request->input('session', GatewayConfig::get('default_session')),
+                'accepted_at' => now()->timestamp];
+            Bus::dispatch(new ProcessIncomingWhatsAppMessageJob($eventData));
         }
 
         if ($event === 'message.ack') {
             $messageId = (string) ($payload['id'] ?? '');
 
-            if ($messageId !== '') {
-                Message::where('wa_message_id', $messageId)->update([
-                    'delivered_at' => now(),
-                    'read_at' => (($payload['ack'] ?? 0) >= 3) ? now() : null,
-                ]);
-                CampaignRecipient::where('wa_message_id', $messageId)->update([
-                    'delivered_at' => now(),
-                    'read_at' => (($payload['ack'] ?? 0) >= 3) ? now() : null,
-                ]);
+            $ack = (int) ($payload['ack'] ?? 0);
+            if ($messageId !== '' && $ack >= 2) {
+                $changes = ['delivered_at' => now()];
+                if ($ack >= 3) {
+                    $changes['read_at'] = now();
+                }
+                Message::where('wa_message_id', $messageId)->update($changes);
+                CampaignRecipient::where('wa_message_id', $messageId)->update($changes);
             }
         }
 
@@ -50,7 +54,7 @@ class WahaWebhookController extends Controller
             return response()->json(['message' => 'Unauthorized webhook.'], 401);
         }
 
-        $session = (string) $request->input('session', config('waha.default_session'));
+        $session = (string) $request->input('session', GatewayConfig::get('default_session'));
         $status = (string) $request->input('payload.status', 'unknown');
 
         WhatsAppSession::updateOrCreate(
@@ -69,11 +73,20 @@ class WahaWebhookController extends Controller
 
     private function isAuthorized(Request $request): bool
     {
-        $secret = (string) config('waha.webhook_secret');
-        $apiKey = (string) config('waha.api_key');
+        $expectedProvider = str_starts_with((string) $request->route()?->getName(), 'webhooks.whatsapp.') ? 'baileys' : 'waha';
+        if ($expectedProvider !== GatewayConfig::provider()) {
+            return false;
+        }
+        $secret = (string) GatewayConfig::get('webhook_secret');
+        $apiKey = (string) GatewayConfig::get('api_key');
 
         $providedSecret = (string) $request->header('X-Webhook-Secret', $request->input('secret', ''));
         $providedApiKey = (string) $request->header('X-Api-Key', '');
+
+        // Baileys always signs callbacks with its own dedicated webhook secret.
+        if ($expectedProvider === 'baileys') {
+            return $secret !== '' && hash_equals($secret, $providedSecret);
+        }
 
         if ($secret !== '' && hash_equals($secret, $providedSecret)) {
             return true;
@@ -99,7 +112,8 @@ class WahaWebhookController extends Controller
 
     private function normalizePhone(string $id): ?string
     {
-        $value = str_replace(['@c.us', '@s.whatsapp.net'], '', $id);
+        $value = preg_replace('/:\d+(?=@)/', '', $id);
+        $value = str_replace(['@c.us', '@s.whatsapp.net'], '', $value);
 
         return $value !== '' ? $value : null;
     }

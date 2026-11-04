@@ -126,7 +126,7 @@ class InboxManagementTest extends TestCase
     public function test_inbox_limits_visible_messages_and_can_delete_chat_history(): void
     {
         $admin = User::factory()->create([
-            'role' => UserRole::ADMIN,
+            'role' => UserRole::OWNER,
             'status' => UserStatus::ACTIVE,
         ]);
 
@@ -154,7 +154,7 @@ class InboxManagementTest extends TestCase
             ->assertSee('Hapus History');
 
         $this->actingAs($admin)
-            ->post(route('admin.inbox.delete-history', $conversation))
+            ->post(route('admin.inbox.delete-history', $conversation), ['confirmed' => 1, 'reason' => 'Riwayat uji telah ditinjau owner.'])
             ->assertRedirect(route('admin.inbox', ['conversation' => $conversation->id]));
 
         $this->assertDatabaseHas('conversations', [

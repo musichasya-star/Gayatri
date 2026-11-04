@@ -120,7 +120,7 @@ class ReminderAutomationTest extends TestCase
         config()->set('waha.base_url', 'http://waha.test');
         Http::fake([
             'http://waha.test/api/sendText' => Http::sequence()
-                ->push([], 500)
+                ->push([], 409)
                 ->push(['id' => 'retry-msg-001'], 200),
         ]);
         [$admin, $customer, , $service, , $conversation] = $this->seedBookingData();

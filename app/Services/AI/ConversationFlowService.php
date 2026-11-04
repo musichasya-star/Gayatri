@@ -20,9 +20,13 @@ class ConversationFlowService
     private const CANCEL_WORDS = ['batal', 'tidak jadi', 'ga jadi', 'nggak jadi', 'gak jadi', 'lain kali saja', 'cancel', 'jangan dulu', 'nanti saja'];
 
     private ?array $activeServicesCache = null;
+
     private array $textExtractionCache = [];
+
     private array $availabilitySlotsCache = [];
+
     private array $managedSlotsCache = [];
+
     private array $slotCache = [];
 
     private function isBenchmarkBaseline(): bool
@@ -37,6 +41,11 @@ class ConversationFlowService
 
     public function handle(Conversation $conversation, Message $message): ?array
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            app(AiLegacyHold::class)->conversation($conversation->id);
+
+            return null;
+        }
         $text = Str::of((string) $message->content)->lower()->squish()->toString();
         $flow = $this->activeFlow($conversation);
 
@@ -69,6 +78,9 @@ class ConversationFlowService
 
     public function shouldSkipExtraction(Message $message): bool
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            return true;
+        }
         $text = Str::of((string) $message->content)->lower()->squish()->toString();
 
         if ($this->isNewBookingIntent($text) || $this->isRescheduleIntent($text)) {

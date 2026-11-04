@@ -20,10 +20,14 @@ use App\Support\ReminderStatus;
 use App\Support\ReminderType;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiAutomationReminderRuleTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     public function test_reminder_rule_with_create_h1_reminder_creates_h1_scheduled_from_booking_time(): void
@@ -384,6 +388,7 @@ class AiAutomationReminderRuleTest extends TestCase
 
     public function test_reminder_uses_raw_ai_response_followup_scheduled_at_when_extracted_followup_data_missing(): void
     {
+        $this->travelTo(Carbon::parse('2026-07-01 09:00:00', 'Asia/Jakarta'));
         $expectedScheduledAt = Carbon::parse('2026-07-02 10:00:00');
 
         [$customer, $conversation] = $this->seedConversation('628123451607', 'Bunda Reminder Raw Schedule');
@@ -436,6 +441,7 @@ class AiAutomationReminderRuleTest extends TestCase
 
     public function test_reminder_uses_raw_ai_response_reminder_scheduled_at_when_followup_is_empty(): void
     {
+        $this->travelTo(Carbon::parse('2026-07-01 09:00:00', 'Asia/Jakarta'));
         $expectedScheduledAt = Carbon::parse('2026-07-02 16:30:00');
 
         [$customer, $conversation] = $this->seedConversation('628123451608', 'Bunda Reminder ReminderNode');

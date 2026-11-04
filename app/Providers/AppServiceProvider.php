@@ -4,9 +4,16 @@ namespace App\Providers;
 
 use App\Models\AiAutomationApproval;
 use App\Models\Booking;
+use App\Services\AI\AiChatCustomization;
 use App\Services\AppSettingService;
+use App\Services\WhatsApp\BaileysService;
+use App\Services\WhatsApp\GatewayConfig;
+use App\Services\WhatsApp\QueueMonitor;
+use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\WhatsAppGateway;
 use App\Support\BookingStatus;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -17,7 +24,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(WhatsAppGateway::class, function ($app) {
+            // Queue workers are long-lived: resolve freshly saved gateway settings per job.
+            $app->make(AppSettingService::class)->applyToConfig();
+
+            return $app->make(GatewayConfig::provider() === 'baileys' ? BaileysService::class : WahaService::class);
+        });
     }
 
     /**
@@ -25,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Queue::looping(fn ($event) => QueueMonitor::heartbeat($event->connectionName, $event->queue));
         app(AppSettingService::class)->applyToConfig();
         Paginator::defaultView('vendor.pagination.gayatri');
 
@@ -39,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
                 ->count();
 
             $view->with('topbarIncomingBookingCount', $incomingBookingCount + $incomingApprovalCount);
+            $view->with('topbarAiEnabled', app(AiChatCustomization::class)->settings()['enabled']);
         });
     }
 }

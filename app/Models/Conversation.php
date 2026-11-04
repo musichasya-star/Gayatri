@@ -7,10 +7,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Query\Expression;
+use Illuminate\Support\Facades\DB;
 
 class Conversation extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::updating(function (Conversation $conversation) {
+            $controlStatus = ['human_handled', 'closed', 'escalated'];
+            if ($conversation->isDirty(['ai_enabled', 'assigned_user_id', 'customer_id', 'wa_chat_id', 'whatsapp_session_id', 'closed_at', 'ai_resumed_at', 'ai_reply_after_message_id'])
+                || ($conversation->isDirty('status') && (in_array($conversation->status, $controlStatus, true)
+                    || in_array($conversation->getOriginal('status'), $controlStatus, true)))) {
+                $conversation->ai_control_revision = DB::raw('ai_control_revision + 1');
+            }
+        });
+        static::updated(function (Conversation $conversation) {
+            if (($conversation->getAttributes()['ai_control_revision'] ?? null) instanceof Expression) {
+                $conversation->ai_control_revision = (int) static::whereKey($conversation->id)->value('ai_control_revision');
+            }
+        });
+    }
 
     protected $fillable = [
         'customer_id',
@@ -25,12 +44,16 @@ class Conversation extends Model
         'last_incoming_at',
         'closed_at',
         'internal_note',
+        'ai_needs_attention', 'ai_handoff_reason',
+        'ai_reply_after_message_id', 'ai_resumed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'ai_enabled' => 'boolean',
+            'ai_needs_attention' => 'boolean',
+            'ai_reply_after_message_id' => 'integer', 'ai_resumed_at' => 'datetime',
             'last_message_at' => 'datetime',
             'last_incoming_at' => 'datetime',
             'closed_at' => 'datetime',

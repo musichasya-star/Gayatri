@@ -26,7 +26,7 @@ curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
-## 2. Database MySQL
+## 2. install Database MySQL
 
 ```sql
 CREATE DATABASE gayatri_crm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

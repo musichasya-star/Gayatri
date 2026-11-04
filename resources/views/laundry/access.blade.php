@@ -1,0 +1,4 @@
+@extends('layouts.laundry-customer')
+@section('content')
+<section class="card accent access-card"><p class="eyebrow">AKSES PRIBADI</p><h1>Portal Laundry Anda.</h1><p class="muted">Buka tautan pribadi dari pesanan atau admin. Tautan adalah kunci akses ke rincian pesanan; simpan dan bagikan hanya kepada pihak yang Anda percaya.</p><form class="form-stack" data-portal-access method="POST" action="{{ route('laundry.portal.access') }}">@csrf<label>Kode akses pribadi<input name="token" minlength="64" maxlength="64" required autocomplete="off" spellcheck="false"><small>Jika tautan tidak terbuka otomatis, salin bagian setelah tanda # dari tautan portal Anda.</small></label><button>Buka portal</button></form><p class="note">Tautan kedaluwarsa atau dicabut? Hubungi admin untuk mendapatkan tautan baru.</p></section>
+@endsection

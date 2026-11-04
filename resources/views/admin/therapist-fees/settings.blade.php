@@ -1,0 +1,31 @@
+@extends('layouts.app')
+@section('title', 'Pengaturan Fee Terapis - Gayatri')
+@section('content')
+@include('partials.admin-workbench-assets')
+<link rel="stylesheet" href="{{ asset('css/therapist-fees.css') }}">
+<x-ui.page-header eyebrow="Fee Terapis" title="Pengaturan Persentase Fee" description="Atur persentase default dan persentase khusus per terapis untuk pijat & spa maupun laktasi & konsultasi ASI." />
+@include('admin.therapist-fees.nav')
+@if(session('status'))<div class="fee-alert" role="status">{{ session('status') }}</div>@endif
+@if($errors->any())<div class="fee-alert fee-error" role="alert">{{ $errors->first() }}</div>@endif
+<div class="wb-scope"><strong>Kebijakan aktif:</strong> {{ $settings['enabled'] ? 'Pencatatan fee diaktifkan' : 'Pencatatan fee dihentikan' }} · Berlaku mulai {{ $settings['start_date'] }}.<br>Default Pijat & Spa {{ $settings['spa_percent'] }}% · Laktasi {{ $settings['lactation_percent'] }}%. Persentase khusus menggantikan default pada kelompok terkait.</div>
+<div class="fee-settings-grid">
+    <section class="card"><div class="card-body"><h2 class="section-title">Kebijakan default</h2>
+        <form data-guard-unsaved method="POST" action="{{ route('admin.therapist-fees.settings.update') }}" class="fee-form">@csrf @method('PUT')
+            <input type="hidden" name="enabled" value="0"><label class="fee-check"><input type="checkbox" name="enabled" value="1" @checked(old('enabled', $settings['enabled']))> Aktifkan pencatatan fee otomatis</label>
+            <label>Tanggal mulai pelayanan yang dihitung<input class="input" type="date" name="start_date" value="{{ old('start_date', $settings['start_date']) }}" required></label>
+            @foreach(\App\Support\ServiceGroup::LABELS as $key => $label)<label>Persentase {{ $label }} (%)<input class="input" type="number" name="{{ $key }}_percent" min="0" max="100" step="0.01" value="{{ old($key.'_percent', $settings[$key.'_percent']) }}" required></label>@endforeach
+            <p class="muted">Nilai 0% menghasilkan fee Rp0. Perubahan berlaku untuk pencatatan berikutnya. Menonaktifkan fitur menghentikan pencatatan baru, tanpa menghapus fee sebelumnya.</p>
+            <button class="button button-primary">Simpan Kebijakan Fee</button>
+        </form>
+    </div></section>
+    <aside class="card"><div class="card-body"><h2 class="section-title">Dasar perhitungan</h2><p class="fee-formula">(Harga treatment + tambahan layanan − diskon) × persentase</p>
+<details class="ops-section"><summary>Coba contoh perhitungan</summary><div class="ops-section-body" data-fee-example><p class="muted">Angka latihan; tidak mencatat fee atau pembayaran. Ongkos perjalanan tidak dihitung.</p><div class="ops-fields">
+@foreach(['treatment'=>['Treatment (Rp)',150000],'addons'=>['Tambahan (Rp)',25000],'discount'=>['Diskon (Rp)',15000],'percent'=>['Persentase (%)',30]] as $key=>$field)<label>{{ $field[0] }}<input class="input" type="number" name="example_{{ $key }}" value="{{ $field[1] }}" min="0" max="{{ $key==='percent' ? 100 : 100000000 }}" step="{{ $key==='percent' ? '0.01' : '1' }}"></label>@endforeach</div><output class="wb-formula-result" data-fee-result aria-live="polite"></output></div></details><ul class="fee-notes"><li>Hanya booking <strong>selesai dan lunas</strong>, sudah ditugaskan ke terapis, serta tanggal pelayanan sampai hari ini.</li><li>Ongkos perjalanan Home Service tidak masuk dasar fee.</li><li>Fee dibulatkan ke rupiah terdekat per booking, tanpa pembulatan ganda pada total laporan.</li><li>Persentase dan nilai perhitungan tersimpan. Perubahan tarif katalog atau persentase tidak menghitung ulang fee yang sama.</li><li>Koreksi data treatment atau penugasan akan memperbarui fee dengan jejak audit. Pembatalan/refund mengeluarkan fee dari total.</li><li>Booking lama diproses melalui pratinjau histori. Jika belum ada snapshot harga, admin harus memeriksa harga katalog yang dipakai saat pencatatan.</li></ul><p class="muted">Laporan ini mencatat hak fee. Pembayaran kepada terapis dilakukan dan dikelola secara manual di luar fitur ini.</p></div></aside>
+</div>
+<section class="card" style="margin-top:1rem;"><div class="card-body"><h2 class="section-title">Persentase khusus per terapis</h2><p class="muted">Kosongkan untuk mengikuti default kelompok layanan. Isi 0 jika terapis tidak mendapat fee pada kelompok tersebut. Terapis nonaktif tetap ditampilkan untuk kebutuhan riwayat.</p>
+<form method="GET" class="ops-actions" style="margin:1rem 0"><label>Cari terapis<input class="input" name="search" maxlength="100" value="{{ request('search') }}"></label><button class="button button-secondary">Cari terapis</button><a href="{{ route('admin.therapist-fees.settings') }}">Reset</a></form>
+<div class="grid">@forelse($therapists as $therapist)<details class="ops-section" @if((int)old('editing_therapist')===$therapist->id) open @endif><summary>{{ $therapist->name }} · {{ $therapist->status==='active' ? 'Aktif' : 'Nonaktif' }}<span class="ops-subtitle">Pijat & Spa {{ $therapist->fee_spa_percent ?? $settings['spa_percent'] }}% · Laktasi {{ $therapist->fee_lactation_percent ?? $settings['lactation_percent'] }}% · buka untuk mengatur</span></summary><div class="ops-section-body"><form data-guard-unsaved class="fee-form fee-override" method="POST" action="{{ route('admin.therapist-fees.therapist.update', $therapist) }}">@csrf @method('PUT')<input type="hidden" name="editing_therapist" value="{{ $therapist->id }}"><h3>{{ $therapist->name }}</h3><span class="muted">{{ $therapist->status === 'active' ? 'Aktif' : 'Nonaktif' }}</span>
+    @foreach(\App\Support\ServiceGroup::LABELS as $key => $label)<label>{{ $label }} (%)<input class="input" type="number" name="fee_{{ $key }}_percent" min="0" max="100" step="0.01" placeholder="Ikuti default" value="{{ (int)old('editing_therapist')===$therapist->id ? old('fee_'.$key.'_percent',$therapist->getAttribute('fee_'.$key.'_percent')) : $therapist->getAttribute('fee_'.$key.'_percent') }}"></label>@endforeach<button class="button button-secondary">Simpan Fee {{ $therapist->name }}</button>
+</form></div></details>@empty<p class="muted">Tambahkan profil terapis terlebih dahulu melalui menu Therapists.</p>@endforelse</div>{{ $therapists->links() }}
+</div></section>
+@endsection

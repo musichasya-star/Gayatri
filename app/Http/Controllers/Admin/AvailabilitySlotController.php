@@ -22,6 +22,7 @@ class AvailabilitySlotController extends Controller
 
     public function index(Request $request): View
     {
+        $request->validate(['date' => ['nullable', 'date_format:Y-m-d'], 'page' => ['nullable', 'integer', 'min:1'], 'service_id' => ['nullable', 'integer', 'exists:services,id'], 'branch_id' => ['nullable', 'integer', 'exists:branches,id'], 'status' => ['nullable', Rule::in(AvailabilitySlotStatus::all())]]);
         $date = $request->date('date')?->toDateString() ?? now()->toDateString();
         $slots = AvailabilitySlot::query()
             ->with(['branch', 'service', 'therapist'])
@@ -186,7 +187,7 @@ class AvailabilitySlotController extends Controller
     {
         return [
             'branches' => Branch::where('status', 'active')->orderBy('name')->get(),
-            'services' => Service::where('is_active', true)->orderBy('name')->get(),
+            'services' => Service::bookable()->where('is_active', true)->orderBy('name')->get(),
             'therapists' => Therapist::where('status', 'active')->orderBy('name')->get(),
             'statuses' => AvailabilitySlotStatus::all(),
         ];

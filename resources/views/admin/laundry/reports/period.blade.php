@@ -1,0 +1,10 @@
+<section class="laundry-report-section"><div class="laundry-report-heading"><div><p class="laundry-eyebrow">PERIODE TERPILIH</p><h2>Aktivitas & nilai Laundry</h2></div><a href="{{ route('admin.laundry.reports.export',$filters+['type'=>'daily']) }}" class="button button-secondary">Ekspor Ringkasan Harian</a></div>
+<div class="laundry-stats laundry-report-metrics">
+@foreach([
+    ['label'=>'Pesanan diterima','value'=>number_format($report['period']['orders']),'note'=>'Menurut tanggal penerimaan, termasuk yang dibatalkan.'],
+    ['label'=>'Tagihan disetujui','value'=>$rp($report['period']['charges']),'note'=>$report['period']['approved_orders'].' pesanan diterima pada periode ini; jasa + ongkir.'],
+    ['label'=>'Pembayaran berlaku','value'=>$rp($report['period']['paid']),'note'=>'Menurut tanggal bayar; hanya pencatatan yang belum dikoreksi.'],
+    ['label'=>'Diserahkan dalam periode','value'=>number_format($report['period']['completed']),'note'=>'Menurut waktu serah terima, termasuk pesanan yang diterima sebelumnya.'],
+] as $metric)<article class="card"><div class="card-body"><p class="muted">{{ $metric['label'] }}</p><strong>{{ $metric['value'] }}</strong><p class="laundry-report-meta">{{ $metric['note'] }}</p></div></article>@endforeach
+</div><div class="laundry-report-breakdown"><div><span>Jasa disetujui</span><strong>{{ $rp($report['period']['service']) }}</strong></div><div><span>Ongkir jemput</span><strong>{{ $rp($report['period']['pickup']) }}</strong></div><div><span>Ongkir antar</span><strong>{{ $rp($report['period']['delivery']) }}</strong></div><div><span>Berat aktual layanan kg</span><strong>{{ number_format($report['period']['kg_milli']/1000,3,',','.') }} kg</strong></div><div><span>Jumlah layanan satuan</span><strong>{{ number_format($report['period']['piece_count']) }} potong</strong></div></div>
+<p class="muted laundry-report-meta">Tagihan dan volume memakai pesanan yang diterima pada periode ini dan saat ini sudah disetujui. Berat aktual berbeda dari dasar tagih minimum/pembulatan. Pembayaran dapat berasal dari pesanan periode lain. Angka tagihan dan pembayaran bukan perhitungan laba.</p></section>

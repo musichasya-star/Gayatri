@@ -13,6 +13,7 @@ use App\Models\Customer;
 use App\Models\Promo;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\AI\AiInteractionPolicy;
 use App\Services\AI\AiService;
 use App\Services\CRM\CampaignService;
 use App\Services\WhatsApp\WahaService;
@@ -23,6 +24,8 @@ use App\Support\PaymentStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
 class PromoCampaignTest extends TestCase
@@ -255,8 +258,12 @@ class PromoCampaignTest extends TestCase
         $this->assertNotNull($recipient->booking_id);
     }
 
+    #[Group('legacy-ai')]
     public function test_ai_only_mentions_active_usable_promos(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         AiPersona::create(['name' => 'Gayatri AI', 'slug' => 'gayatri-ai', 'prompt' => 'Jawab ramah.', 'tone' => 'ramah', 'is_active' => true]);
         Promo::create(['title' => 'Promo Aktif', 'code' => 'ACTIVE10', 'type' => 'percent', 'value' => 10, 'is_active' => true, 'start_at' => now()->subDay(), 'end_at' => now()->addDay()]);
         Promo::create(['title' => 'Promo Expired', 'code' => 'OLD10', 'type' => 'percent', 'value' => 10, 'is_active' => true, 'start_at' => now()->subDays(5), 'end_at' => now()->subDay()]);
@@ -267,8 +274,12 @@ class PromoCampaignTest extends TestCase
         $this->assertStringNotContainsString('Promo Expired', $result['reply']);
     }
 
+    #[Group('legacy-ai')]
     public function test_ai_promo_reply_uses_database_before_external_provider(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         config()->set('ai.provider', 'openrouter');
         config()->set('ai.api_key', 'test-key');
         config()->set('ai.model', 'test-model');

@@ -13,12 +13,15 @@ use App\Models\Service;
 use App\Models\Therapist;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Services\AI\AiInteractionPolicy;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use App\Support\PaymentStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
 class BookingManagementTest extends TestCase
@@ -316,8 +319,12 @@ class BookingManagementTest extends TestCase
             ->assertSee(route('admin.ai.data-automation.approvals.show', $approval), false);
     }
 
+    #[Group('legacy-ai')]
     public function test_approval_reschedule_and_booking_status_updates_send_whatsapp_notifications(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         config()->set('waha.base_url', 'http://waha.test');
         Http::fake(['http://waha.test/api/sendText' => Http::sequence()
             ->push(['id' => 'wamid-booking-rescheduled'], 200)
@@ -401,8 +408,12 @@ class BookingManagementTest extends TestCase
         ]);
     }
 
+    #[Group('legacy-ai')]
     public function test_review_request_cancel_approval_updates_booking_status(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         config()->set('waha.base_url', 'http://waha.test');
         Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-booking-cancelled-review'], 200)]);
 
@@ -462,8 +473,12 @@ class BookingManagementTest extends TestCase
         $this->assertSame(BookingStatus::CANCELLED, $booking->fresh()->status);
     }
 
+    #[Group('legacy-ai')]
     public function test_approval_reschedule_allows_manual_customer_booking_on_lid_conversation(): void
     {
+        $this->partialMock(AiInteractionPolicy::class, function (MockInterface $mock) {
+            $mock->shouldReceive('allowsLegacyAutomation')->andReturnTrue();
+        });
         config()->set('waha.base_url', 'http://waha.test');
         Http::fake(['http://waha.test/api/sendText' => Http::response(['id' => 'wamid-lid-reschedule'], 200)]);
 

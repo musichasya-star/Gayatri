@@ -3,13 +3,14 @@
 @section('title', ($customer->exists ? 'Edit Customer' : 'Tambah Customer') . ' - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
     <x-ui.page-header
         eyebrow="CRM Master Data"
         title="{{ $customer->exists ? 'Edit Customer' : 'Tambah Customer' }}"
         description="Simpan data customer inti untuk inbox, booking, follow-up, dan campaign."
     >
         <x-slot name="actions">
-            <a class="button button-secondary" href="{{ $customer->exists ? route('admin.customers.show', $customer) : route('admin.customers.index') }}"><i data-lucide="arrow-left"></i> Kembali</a>
+            <a class="button button-secondary" href="{{ $customer->exists ? route('admin.customers.show',array_merge(['customer'=>$customer],\App\Support\AdminReviewContext::carry(request(),'customers'))) : \App\Support\AdminReviewContext::back(request(),'customers') }}"><i data-lucide="arrow-left"></i> Kembali</a>
         </x-slot>
     </x-ui.page-header>
 
@@ -21,8 +22,8 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="POST" action="{{ $customer->exists ? route('admin.customers.update', $customer) : route('admin.customers.store') }}" class="grid grid-2">
-                @csrf
+            <form data-guard-unsaved method="POST" action="{{ $customer->exists ? route('admin.customers.update', $customer) : route('admin.customers.store') }}" class="grid grid-2">
+                @csrf @include('partials.admin-review-fields',['reviewModule'=>'customers'])
                 @if ($customer->exists)
                     @method('PUT')
                 @endif
@@ -69,6 +70,7 @@
                 <label>
                     <span class="muted" style="display: block; margin-bottom: .4rem; font-weight: 700;">Tanggal Lahir Ibu</span>
                     <input class="input" type="date" name="birth_date" value="{{ old('birth_date', optional($customer->birth_date)->format('Y-m-d')) }}">
+                    <small class="muted">Dipakai untuk ucapan ulang tahun WhatsApp jika fitur diaktifkan.</small>
                 </label>
 
                 <label>
@@ -79,6 +81,7 @@
                 <label>
                     <span class="muted" style="display: block; margin-bottom: .4rem; font-weight: 700;">Tanggal Lahir Bayi</span>
                     <input class="input" type="date" name="baby_birth_date" value="{{ old('baby_birth_date', optional($customer->baby_birth_date)->format('Y-m-d')) }}">
+                    <small class="muted">Dipakai jika ucapan ulang tahun bayi diaktifkan.</small>
                 </label>
 
                 <label>
@@ -102,7 +105,7 @@
                 </label>
 
                 <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: .75rem; flex-wrap: wrap;">
-                    <a class="button button-secondary" href="{{ $customer->exists ? route('admin.customers.show', $customer) : route('admin.customers.index') }}">Batal</a>
+                    <a class="button button-secondary" href="{{ $customer->exists ? route('admin.customers.show',array_merge(['customer'=>$customer],\App\Support\AdminReviewContext::carry(request(),'customers'))) : \App\Support\AdminReviewContext::back(request(),'customers') }}">Batal</a>
                     <button class="button button-primary" type="submit"><i data-lucide="save"></i> Simpan</button>
                 </div>
             </form>

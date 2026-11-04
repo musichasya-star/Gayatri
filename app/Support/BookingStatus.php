@@ -22,6 +22,11 @@ final class BookingStatus
 
     public const NO_SHOW = 'no_show';
 
+    public static function label(string $status): string
+    {
+        return ['draft' => 'Draf', 'pending' => 'Menunggu konfirmasi', 'pending_confirmation' => 'Menunggu konfirmasi pelanggan', 'confirmed' => 'Dikonfirmasi', 'completed' => 'Selesai', 'cancelled' => 'Dibatalkan', 'cancelled_by_user' => 'Dibatalkan pelanggan', 'rescheduled' => 'Dijadwalkan ulang', 'no_show' => 'Tidak hadir'][$status] ?? $status;
+    }
+
     public static function all(): array
     {
         return [

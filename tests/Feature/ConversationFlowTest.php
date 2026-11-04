@@ -19,10 +19,14 @@ use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class ConversationFlowTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     public function test_booking_flow_validates_each_step_and_can_be_cancelled(): void

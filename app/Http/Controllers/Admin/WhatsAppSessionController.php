@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\WhatsAppSession;
-use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\GatewayConfig;
+use App\Services\WhatsApp\WhatsAppGateway;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -12,20 +14,30 @@ use Throwable;
 
 class WhatsAppSessionController extends Controller
 {
-    public function __construct(private readonly WahaService $wahaService) {}
+    public function __construct(private readonly WhatsAppGateway $wahaService) {}
 
     public function index(): View
     {
-        $sessionName = (string) config('waha.default_session');
+        $sessionName = (string) GatewayConfig::get('default_session');
         $remoteSession = null;
         $qr = null;
         $error = null;
 
         try {
-            $remoteSession = $this->ensureGatewaySession($sessionName);
+            $remoteSession = $this->findSession($this->wahaService->listSessions(), $sessionName);
+            if ($remoteSession === null) {
+                $error = 'Sesi belum terdaftar. Gunakan Mulai sesi setelah konfigurasi gateway diperiksa.';
+            }
 
-            if ($this->shouldShowQr($remoteSession)) {
-                $qr = $this->wahaService->getQr($sessionName);
+            if ($remoteSession !== null && $this->shouldShowQr($remoteSession)) {
+                try {
+                    $qr = $this->wahaService->getQr($sessionName);
+                } catch (RequestException $exception) {
+                    // A socket needs a moment to obtain its first QR from WhatsApp.
+                    if (GatewayConfig::provider() !== 'baileys' || $exception->response->status() !== 409) {
+                        throw $exception;
+                    }
+                }
             }
         } catch (Throwable $exception) {
             $error = $exception->getMessage();
@@ -39,62 +51,64 @@ class WhatsAppSessionController extends Controller
             'localSession' => $localSession,
             'qr' => $qr,
             'error' => $error,
+            'gatewayLabel' => GatewayConfig::label(),
+            'webhookRoutePrefix' => GatewayConfig::provider() === 'baileys' ? 'webhooks.whatsapp' : 'webhooks.waha',
         ]);
     }
 
     public function start(Request $request): RedirectResponse
     {
-        $sessionName = (string) $request->input('session_name', config('waha.default_session'));
+        $sessionName = (string) $request->input('session_name', GatewayConfig::get('default_session'));
 
         try {
             $this->ensureGatewaySession($sessionName);
             $this->wahaService->updateSession($sessionName, $this->sessionConfig());
             $this->wahaService->startSession($sessionName);
         } catch (Throwable $exception) {
-            return redirect()->route('admin.whatsapp.session')->withErrors(['waha' => 'Gagal start session WAHA: '.$exception->getMessage()]);
+            return redirect()->route('admin.whatsapp.session')->withErrors(['whatsapp' => 'Gagal start session '.GatewayConfig::label().': '.$exception->getMessage()]);
         }
 
-        return redirect()->route('admin.whatsapp.session')->with('status', 'Session WAHA berhasil dijalankan.');
+        return redirect()->route('admin.whatsapp.session')->with('status', 'Session '.GatewayConfig::label().' berhasil dijalankan.');
     }
 
     public function stop(Request $request): RedirectResponse
     {
-        $sessionName = (string) $request->input('session_name', config('waha.default_session'));
+        $sessionName = (string) $request->input('session_name', GatewayConfig::get('default_session'));
 
         try {
             $this->wahaService->stopSession($sessionName);
         } catch (Throwable $exception) {
-            return redirect()->route('admin.whatsapp.session')->withErrors(['waha' => 'Gagal stop session WAHA: '.$exception->getMessage()]);
+            return redirect()->route('admin.whatsapp.session')->withErrors(['whatsapp' => 'Gagal stop session '.GatewayConfig::label().': '.$exception->getMessage()]);
         }
 
-        return redirect()->route('admin.whatsapp.session')->with('status', 'Session WAHA berhasil dihentikan.');
+        return redirect()->route('admin.whatsapp.session')->with('status', 'Session '.GatewayConfig::label().' berhasil dihentikan.');
     }
 
     public function logout(Request $request): RedirectResponse
     {
-        $sessionName = (string) $request->input('session_name', config('waha.default_session'));
+        $sessionName = (string) $request->input('session_name', GatewayConfig::get('default_session'));
 
         try {
             $this->wahaService->logoutSession($sessionName);
         } catch (Throwable $exception) {
-            return redirect()->route('admin.whatsapp.session')->withErrors(['waha' => 'Gagal logout session WAHA: '.$exception->getMessage()]);
+            return redirect()->route('admin.whatsapp.session')->withErrors(['whatsapp' => 'Gagal logout session '.GatewayConfig::label().': '.$exception->getMessage()]);
         }
 
-        return redirect()->route('admin.whatsapp.session')->with('status', 'Session WAHA berhasil logout.');
+        return redirect()->route('admin.whatsapp.session')->with('status', 'Session '.GatewayConfig::label().' berhasil logout.');
     }
 
     public function restart(Request $request): RedirectResponse
     {
-        $sessionName = (string) $request->input('session_name', config('waha.default_session'));
+        $sessionName = (string) $request->input('session_name', GatewayConfig::get('default_session'));
 
         try {
             $this->wahaService->updateSession($sessionName, $this->sessionConfig());
             $this->wahaService->restartSession($sessionName);
         } catch (Throwable $exception) {
-            return redirect()->route('admin.whatsapp.session')->withErrors(['waha' => 'Gagal restart session WAHA: '.$exception->getMessage()]);
+            return redirect()->route('admin.whatsapp.session')->withErrors(['whatsapp' => 'Gagal restart session '.GatewayConfig::label().': '.$exception->getMessage()]);
         }
 
-        return redirect()->route('admin.whatsapp.session')->with('status', 'Session WAHA berhasil direstart.');
+        return redirect()->route('admin.whatsapp.session')->with('status', 'Session '.GatewayConfig::label().' berhasil direstart.');
     }
 
     private function ensureGatewaySession(string $sessionName): array
@@ -122,15 +136,17 @@ class WhatsAppSessionController extends Controller
 
     private function sessionConfig(): array
     {
+        $prefix = GatewayConfig::provider() === 'baileys' ? 'webhooks.whatsapp' : 'webhooks.waha';
+
         return [
             'webhooks' => [
                 [
-                    'url' => $this->webhookUrl('webhooks.waha.messages'),
+                    'url' => $this->webhookUrl($prefix.'.messages'),
                     'events' => ['message', 'message.any', 'message.ack'],
                     'customHeaders' => $this->webhookHeaders(),
                 ],
                 [
-                    'url' => $this->webhookUrl('webhooks.waha.status'),
+                    'url' => $this->webhookUrl($prefix.'.status'),
                     'events' => ['session.status'],
                     'customHeaders' => $this->webhookHeaders(),
                 ],
@@ -149,16 +165,19 @@ class WhatsAppSessionController extends Controller
     private function webhookUrl(string $routeName): string
     {
         $url = route($routeName);
-        $baseUrl = trim((string) config('waha.webhook_base_url'));
+        $baseUrl = trim((string) GatewayConfig::get('webhook_base_url'));
 
         if ($baseUrl !== '') {
-            return rtrim($baseUrl, '/').parse_url($url, PHP_URL_PATH);
+            // Keep subdirectory installations (for example /Gayatri/public) intact.
+            $routePath = '/webhooks/'.(GatewayConfig::provider() === 'baileys' ? 'whatsapp' : 'waha').'/'.(str_ends_with($routeName, '.status') ? 'status' : 'messages');
+
+            return rtrim($baseUrl, '/').$routePath;
         }
 
-        $wahaHost = parse_url((string) config('waha.base_url'), PHP_URL_HOST);
+        $wahaHost = parse_url((string) GatewayConfig::get('base_url'), PHP_URL_HOST);
         $host = parse_url($url, PHP_URL_HOST);
 
-        if (in_array((string) $wahaHost, ['localhost', '127.0.0.1'], true)
+        if (GatewayConfig::provider() === 'waha' && in_array((string) $wahaHost, ['localhost', '127.0.0.1'], true)
             && in_array((string) $host, ['localhost', '127.0.0.1'], true)) {
             return str_replace('://'.$host, '://host.docker.internal', $url);
         }
@@ -170,12 +189,12 @@ class WhatsAppSessionController extends Controller
     {
         $headers = [];
 
-        if (filled(config('waha.webhook_secret'))) {
-            $headers[] = ['name' => 'X-Webhook-Secret', 'value' => (string) config('waha.webhook_secret')];
+        if (filled(GatewayConfig::get('webhook_secret'))) {
+            $headers[] = ['name' => 'X-Webhook-Secret', 'value' => (string) GatewayConfig::get('webhook_secret')];
         }
 
-        if (filled(config('waha.api_key'))) {
-            $headers[] = ['name' => 'X-Api-Key', 'value' => (string) config('waha.api_key')];
+        if (filled(GatewayConfig::get('api_key'))) {
+            $headers[] = ['name' => 'X-Api-Key', 'value' => (string) GatewayConfig::get('api_key')];
         }
 
         return $headers;

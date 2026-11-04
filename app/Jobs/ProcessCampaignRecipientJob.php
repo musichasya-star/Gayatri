@@ -6,7 +6,8 @@ use App\Models\CampaignRecipient;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\CRM\CampaignService;
-use App\Services\WhatsApp\WahaService;
+use App\Services\WhatsApp\GatewayConfig;
+use App\Services\WhatsApp\WhatsAppGateway;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -17,7 +18,7 @@ class ProcessCampaignRecipientJob implements ShouldQueue
 
     public function __construct(private readonly int $recipientId) {}
 
-    public function handle(WahaService $wahaService, CampaignService $campaignService): void
+    public function handle(WhatsAppGateway $wahaService, CampaignService $campaignService): void
     {
         $recipient = CampaignRecipient::with(['campaign.promo', 'customer'])->find($this->recipientId);
 
@@ -38,7 +39,7 @@ class ProcessCampaignRecipientJob implements ShouldQueue
         );
 
         try {
-            $result = $wahaService->sendText(config('waha.default_session'), $conversation->wa_chat_id, $this->message($recipient));
+            $result = $wahaService->sendText(GatewayConfig::get('default_session'), $conversation->wa_chat_id, $this->message($recipient));
             $recipient->update([
                 'status' => 'sent',
                 'wa_message_id' => data_get($result, 'id'),

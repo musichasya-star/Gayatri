@@ -3,42 +3,20 @@
 @section('title', 'Jadwal Tersedia - Gayatri CRM')
 
 @section('content')
-    <x-ui.page-header eyebrow="Operasional" title="Jadwal Tersedia" description="Input slot tersedia per tanggal, cabang, layanan, dan terapis agar booking dan AI membaca jadwal real." />
+@include('partials.admin-operations-assets')
+    <x-ui.page-header eyebrow="Operasional" title="Jadwal Tersedia" description="Input slot tersedia per tanggal, cabang, layanan, dan terapis untuk menjaga ketersediaan booking. Pilih tanggal untuk melihat daftar slot." />
 
     @if(session('status'))<div class="card" style="margin-bottom:1rem;border-color:rgba(143,174,139,.55);"><div class="card-body" style="color:#3f6d3d;">{{ session('status') }}</div></div>@endif
     @if($errors->any())<div class="card" style="margin-bottom:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;">{{ $errors->first() }}</div></div>@endif
 
-    <section class="grid grid-2" style="margin-bottom:1rem;align-items:start;">
-        <div class="card"><div class="card-body"><h2 class="section-title">Tambah Slot</h2><form method="POST" action="{{ route('admin.availability.store') }}" class="grid grid-2">@csrf
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Tanggal</span><input class="input" type="date" name="slot_date" value="{{ old('slot_date', $date) }}" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Status</span><select class="input" name="status" required>@foreach($statuses as $status)<option value="{{ $status }}">{{ $status }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Cabang</span><select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Layanan</span><select class="input" name="service_id" required><option value="">Pilih layanan</option>@foreach($services as $service)<option value="{{ $service->id }}">{{ $service->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Terapis</span><select class="input" name="therapist_id"><option value="">Siapa saja</option>@foreach($therapists as $therapist)<option value="{{ $therapist->id }}">{{ $therapist->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Kapasitas</span><input class="input" type="number" name="capacity" min="1" max="20" value="{{ old('capacity', 1) }}" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Mulai</span><input class="input" type="time" name="start_time" value="{{ old('start_time', '09:00') }}" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Selesai</span><input class="input" type="time" name="end_time" value="{{ old('end_time', '10:00') }}" required></label>
-            <label style="grid-column:1/-1;"><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Catatan</span><input class="input" name="notes" value="{{ old('notes') }}"></label>
-            <div style="grid-column:1/-1;display:flex;justify-content:flex-end;"><button class="button button-primary" type="submit"><i data-lucide="plus"></i> Tambah Slot</button></div>
-        </form></div></div>
+    <nav class="ops-nav" data-record-nav aria-label="Tindakan jadwal"><a class="button button-primary" href="#slot-create">Tambah / buat banyak slot</a><a class="button button-secondary" href="{{ route('admin.bookings.calendar',['date'=>$date]) }}">Lihat booking tanggal ini</a></nav>
 
-        <div class="card"><div class="card-body"><h2 class="section-title">Bulk Generate</h2><form method="POST" action="{{ route('admin.availability.bulk-generate') }}" class="grid grid-2">@csrf
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Tanggal</span><input class="input" type="date" name="slot_date" value="{{ $date }}" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Interval</span><input class="input" type="number" name="interval_minutes" value="60" min="15" max="240" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Cabang</span><select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Layanan</span><select class="input" name="service_id" required><option value="">Pilih layanan</option>@foreach($services as $service)<option value="{{ $service->id }}">{{ $service->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Terapis</span><select class="input" name="therapist_id"><option value="">Siapa saja</option>@foreach($therapists as $therapist)<option value="{{ $therapist->id }}">{{ $therapist->name }}</option>@endforeach</select></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Kapasitas</span><input class="input" type="number" name="capacity" min="1" max="20" value="1" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Dari</span><input class="input" type="time" name="start_time" value="09:00" required></label>
-            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Sampai</span><input class="input" type="time" name="end_time" value="18:00" required></label>
-            <div style="grid-column:1/-1;display:flex;justify-content:flex-end;"><button class="button button-secondary" type="submit"><i data-lucide="calendar-plus"></i> Generate Slot</button></div>
-        </form></div></div>
-    </section>
 
-    <div class="card" style="margin-bottom:1rem;"><div class="card-body"><form method="GET" class="grid grid-4">
-        <input class="input" type="date" name="date" value="{{ $date }}">
-        <select class="input" name="service_id"><option value="">Semua layanan</option>@foreach($services as $service)<option value="{{ $service->id }}" @selected(request('service_id') == $service->id)>{{ $service->name }}</option>@endforeach</select>
-        <select class="input" name="status"><option value="">Semua status</option>@foreach($statuses as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select>
+    <div class="card" style="margin-bottom:1rem;"><div class="card-body"><form method="GET" class="ops-filters">
+        <label>Tanggal jadwal<input class="input" type="date" name="date" value="{{ $date }}"></label>
+        <label>Layanan<select class="input" name="service_id"><option value="">Semua layanan</option>@foreach($services as $service)<option value="{{ $service->id }}" @selected(request('service_id') == $service->id)>{{ $service->name }}</option>@endforeach</select></label>
+        <label>Cabang<select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" @selected((string)request('branch_id')===(string)$branch->id)>{{ $branch->name }}</option>@endforeach</select></label>
+        <label>Status slot<select class="input" name="status"><option value="">Semua status</option>@foreach($statuses as $status)<option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>@endforeach</select></label>
         <button class="button button-secondary" type="submit"><i data-lucide="search"></i> Filter</button>
     </form></div></div>
 
@@ -69,6 +47,32 @@
             </td>
         </tr>@empty<tr><td colspan="8" style="text-align:center;padding:2rem;">Belum ada slot jadwal untuk filter ini.</td></tr>@endforelse
     </tbody></table><div style="margin-top:1rem;">{{ $slots->links() }}</div></div></div>
+    <details class="ops-section" id="slot-create" @if($errors->any()) open @endif><summary>Tambah slot atau buat jadwal sekaligus</summary><div class="ops-section-body">    <section class="grid grid-2" style="margin-bottom:1rem;align-items:start;">
+        <div class="card"><div class="card-body"><h2 class="section-title">Tambah Slot</h2><form method="POST" action="{{ route('admin.availability.store') }}" class="grid grid-2">@csrf
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Tanggal</span><input class="input" type="date" name="slot_date" value="{{ old('slot_date', $date) }}" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Status</span><select class="input" name="status" required>@foreach($statuses as $status)<option value="{{ $status }}">{{ $status }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Cabang</span><select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Layanan</span><select class="input" name="service_id" required><option value="">Pilih layanan</option>@foreach($services as $service)<option value="{{ $service->id }}">{{ $service->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Terapis</span><select class="input" name="therapist_id"><option value="">Siapa saja</option>@foreach($therapists as $therapist)<option value="{{ $therapist->id }}">{{ $therapist->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Kapasitas</span><input class="input" type="number" name="capacity" min="1" max="20" value="{{ old('capacity', 1) }}" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Mulai</span><input class="input" type="time" name="start_time" value="{{ old('start_time', '09:00') }}" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Selesai</span><input class="input" type="time" name="end_time" value="{{ old('end_time', '10:00') }}" required></label>
+            <label style="grid-column:1/-1;"><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Catatan</span><input class="input" name="notes" value="{{ old('notes') }}"></label>
+            <div style="grid-column:1/-1;display:flex;justify-content:flex-end;"><button class="button button-primary" type="submit"><i data-lucide="plus"></i> Tambah Slot</button></div>
+        </form></div></div>
+
+        <div class="card"><div class="card-body"><h2 class="section-title">Bulk Generate</h2><form method="POST" action="{{ route('admin.availability.bulk-generate') }}" class="grid grid-2">@csrf
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Tanggal</span><input class="input" type="date" name="slot_date" value="{{ $date }}" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Interval</span><input class="input" type="number" name="interval_minutes" value="60" min="15" max="240" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Cabang</span><select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Layanan</span><select class="input" name="service_id" required><option value="">Pilih layanan</option>@foreach($services as $service)<option value="{{ $service->id }}">{{ $service->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Terapis</span><select class="input" name="therapist_id"><option value="">Siapa saja</option>@foreach($therapists as $therapist)<option value="{{ $therapist->id }}">{{ $therapist->name }}</option>@endforeach</select></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Kapasitas</span><input class="input" type="number" name="capacity" min="1" max="20" value="1" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Dari</span><input class="input" type="time" name="start_time" value="09:00" required></label>
+            <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Sampai</span><input class="input" type="time" name="end_time" value="18:00" required></label>
+            <div style="grid-column:1/-1;display:flex;justify-content:flex-end;"><button class="button button-secondary" type="submit"><i data-lucide="calendar-plus"></i> Generate Slot</button></div>
+        </form></div></div>
+    </section></div></details>
     <script>
         document.querySelector('[data-slot-check-all]')?.addEventListener('change', (event) => {
             document.querySelectorAll('[data-slot-check]').forEach((checkbox) => {

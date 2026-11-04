@@ -3,6 +3,7 @@
 @section('title', 'Pending Approval - Gayatri CRM')
 
 @section('content')
+    @include('admin.ai.partials.information-mode')
     <x-ui.page-header eyebrow="AI Data Automation" title="Pending Approval" description="Setujui atau tolak aksi AI yang membutuhkan konfirmasi manusia." />
     @if(session('status'))<div class="card" style="margin-bottom:1rem;border-color:rgba(143,174,139,.55);"><div class="card-body" style="color:#3f6d3d;">{{ session('status') }}</div></div>@endif
     @if($errors->any())<div class="card" style="margin-bottom:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;">{{ $errors->first() }}</div></div>@endif

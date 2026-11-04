@@ -3,6 +3,9 @@
 @section('title', 'AI Data Automation - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
+    @include('admin.ai.partials.information-mode')
+    @if(!app(\App\Services\AI\AiInteractionPolicy::class)->allowsLegacyAutomation())<p class="wb-scope"><strong>Arsip otomasi lama.</strong> Transaksi melalui AI, termasuk perubahan booking dan profil, tetap dikunci. Gunakan <a href="{{ route('admin.ai.auto-replies.index') }}">kendali balasan otomatis</a> dan <a href="{{ route('admin.ai.logs.index') }}">monitoring keputusan AI</a> untuk alur aktif.</p>@endif
     <x-ui.page-header eyebrow="AI Management" title="AI Data Automation" description="Pantau rule, data terekstrak, pending approval, dan log automation AI Gayatri.">
         <x-slot name="actions"><a class="button button-primary" href="{{ route('admin.ai.data-automation.rules.create') }}"><i data-lucide="plus"></i> Buat Rule</a></x-slot>
     </x-ui.page-header>

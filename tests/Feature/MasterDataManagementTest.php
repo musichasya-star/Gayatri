@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Models\AuditLog;
 use App\Models\AiAutomationApproval;
 use App\Models\AiAutomationLog;
 use App\Models\AiExtractedData;
 use App\Models\AiLog;
+use App\Models\AuditLog;
 use App\Models\AvailabilitySlot;
 use App\Models\Booking;
 use App\Models\Branch;
@@ -24,10 +24,10 @@ use App\Models\User;
 use App\Models\WhatsAppSession;
 use App\Support\AvailabilitySlotStatus;
 use App\Support\BookingStatus;
+use App\Support\CampaignStatus;
 use App\Support\CustomerStatus;
 use App\Support\PaymentStatus;
 use App\Support\ReminderStatus;
-use App\Support\CampaignStatus;
 use App\Support\UserRole;
 use App\Support\UserStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -331,10 +331,10 @@ CSV;
         $this->assertDatabaseHas('audit_logs', ['action' => 'customer.archived', 'auditable_type' => Customer::class, 'auditable_id' => $customer->id]);
     }
 
-    public function test_admin_can_delete_customer_with_related_module_data(): void
+    public function test_customer_with_booking_history_is_archived_without_deleting_related_data(): void
     {
         $admin = User::factory()->create([
-            'role' => UserRole::ADMIN,
+            'role' => UserRole::OWNER,
             'status' => UserStatus::ACTIVE,
         ]);
         $branch = Branch::create(['name' => 'Cabang Delete', 'code' => 'DEL', 'status' => UserStatus::ACTIVE]);
@@ -437,34 +437,13 @@ CSV;
             'status' => 'pending_approval',
         ]);
 
-        $this->actingAs($admin)
-            ->get(route('admin.customers.index'))
-            ->assertOk()
-            ->assertSee('Hapus');
-
-        $this->actingAs($admin)
-            ->delete(route('admin.customers.destroy', $customer))
-            ->assertRedirect(route('admin.customers.index'))
-            ->assertSessionHas('status');
-
-        $this->assertDatabaseMissing('customers', ['id' => $customer->id]);
-        $this->assertDatabaseMissing('conversations', ['id' => $conversation->id]);
-        $this->assertDatabaseMissing('messages', ['id' => $message->id]);
-        $this->assertDatabaseMissing('bookings', ['id' => $booking->id]);
-        $this->assertDatabaseMissing('reminders', ['customer_id' => $customer->id]);
-        $this->assertDatabaseMissing('followups', ['customer_id' => $customer->id]);
-        $this->assertDatabaseMissing('campaign_recipients', ['customer_id' => $customer->id]);
-        $this->assertDatabaseMissing('feedback', ['customer_id' => $customer->id]);
-        $this->assertDatabaseMissing('ai_logs', ['customer_id' => $customer->id]);
-        $this->assertDatabaseMissing('ai_extracted_data', ['id' => $extracted->id]);
-        $this->assertDatabaseMissing('ai_automation_approvals', ['id' => $approval->id]);
-        $this->assertDatabaseMissing('ai_automation_logs', ['customer_id' => $customer->id]);
-
-        $this->assertDatabaseHas('availability_slots', [
-            'id' => $slot->id,
-            'booked_count' => 0,
-            'status' => AvailabilitySlotStatus::AVAILABLE,
-        ]);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'customer.deleted']);
+        $this->actingAs($admin)->delete(route('admin.customers.destroy', $customer))->assertSessionHasErrors('customer');
+        $this->post(route('admin.customers.archive', $customer))->assertSessionHasNoErrors();
+        $this->assertSame('inactive', $customer->fresh()->status);
+        $this->assertDatabaseHas('bookings', ['id' => $booking->id]);
+        $this->assertDatabaseHas('messages', ['id' => $message->id]);
+        $this->assertDatabaseHas('conversations', ['id' => $conversation->id]);
+        $this->assertDatabaseHas('ai_extracted_data', ['id' => $extracted->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'customer.archived']);
     }
 }

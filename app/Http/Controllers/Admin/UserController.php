@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AdminReviewContext;
 use App\Support\UserRole;
 use App\Support\UserStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -15,6 +17,7 @@ class UserController extends Controller
 {
     public function index(Request $request): View
     {
+        $request->validate(['search' => ['nullable', 'string', 'max:150'], 'page' => ['nullable', 'integer', 'min:1'], 'role' => ['nullable', Rule::in(UserRole::all())], 'status' => ['nullable', Rule::in(UserStatus::all())]]);
         $users = User::query()
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->string('search');
@@ -54,7 +57,7 @@ class UserController extends Controller
 
         User::create($data);
 
-        return redirect()->route('admin.users.index')->with('status', 'User berhasil dibuat.');
+        return redirect(AdminReviewContext::back($request, 'users'))->with('status', 'User berhasil dibuat.');
     }
 
     public function edit(User $user): View
@@ -74,9 +77,14 @@ class UserController extends Controller
             $data['password'] = (string) $request->string('password');
         }
 
-        $user->update($data);
+        if ($request->filled('password') || $user->role !== $data['role'] || $user->email !== $data['email'] || $user->status !== $data['status']) {
+            $data['auth_version'] = $user->auth_version + 1;
+            $data['remember_token'] = Str::random(60);
+        }
 
-        return redirect()->route('admin.users.index')->with('status', 'User berhasil diperbarui.');
+        $user->forceFill($data)->save();
+
+        return redirect(AdminReviewContext::back($request, 'users'))->with('status', 'User berhasil diperbarui.');
     }
 
     public function activate(User $user): RedirectResponse
@@ -92,7 +100,7 @@ class UserController extends Controller
             return back()->withErrors(['user' => 'Anda tidak bisa menonaktifkan akun sendiri.']);
         }
 
-        $user->update(['status' => UserStatus::INACTIVE]);
+        $user->forceFill(['status' => UserStatus::INACTIVE, 'auth_version' => $user->auth_version + 1, 'remember_token' => Str::random(60)])->save();
 
         return back()->with('status', 'User berhasil dinonaktifkan.');
     }

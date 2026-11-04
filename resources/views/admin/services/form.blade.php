@@ -1,162 +1,62 @@
 @extends('layouts.app')
-
-@section('title', ($service->exists ? 'Edit Layanan' : 'Tambah Layanan') . ' - Gayatri CRM')
-
+@section('title', ($service->exists?'Edit Variasi':'Tambah Layanan').' - Gayatri CRM')
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
 @section('content')
-    <x-ui.page-header eyebrow="CRM Master Data" title="{{ $service->exists ? 'Edit Layanan' : 'Tambah Layanan' }}" description="Atur layanan yang dapat ditawarkan admin, AI, dan flow booking.">
-        <x-slot name="actions">
-            <a class="button button-secondary" href="{{ route('admin.services.index') }}"><i data-lucide="arrow-left"></i> Kembali</a>
-        </x-slot>
-    </x-ui.page-header>
-
-    @if ($errors->any())
-        <div class="card" style="margin-bottom: 1rem; border-color: rgba(201,122,106,.55);">
-            <div class="card-body" style="color: #7a3228;">{{ $errors->first() }}</div>
-        </div>
-    @endif
-
-    @php
-        $addonRows = old('addons');
-        if ($addonRows === null) {
-            $addonRows = $service->exists
-                ? $service->addOns->map(fn ($addon) => [
-                    'addon_service_id' => $addon->addon_service_id,
-                    'addon_name' => $addon->addon_name,
-                    'id' => $addon->id,
-                    'duration_minutes' => $addon->duration_minutes,
-                    'price_adjustment' => $addon->price_adjustment,
-                    'is_active' => (int) $addon->is_active,
-                ])->values()->all()
-                : [];
-        }
-        if ($addonRows === []) {
-            $addonRows = [['id' => '', 'addon_service_id' => '', 'addon_name' => '', 'duration_minutes' => 0, 'price_adjustment' => 0, 'is_active' => 1]];
-        }
-    @endphp
-
-    <div class="card">
-        <div class="card-body">
-            <form method="POST" action="{{ $service->exists ? route('admin.services.update', $service) : route('admin.services.store') }}" class="grid grid-2">
-                @csrf
-                @if ($service->exists)
-                    @method('PUT')
-                @endif
-
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Nama Layanan</span><input class="input" type="text" name="name" value="{{ old('name', $service->name) }}" required></label>
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Cabang</span>
-                    <select class="input" name="branch_id">
-                        <option value="">Semua cabang</option>
-                        @foreach ($branches as $branch)
-                            <option value="{{ $branch->id }}" @selected((string) old('branch_id', $service->branch_id) === (string) $branch->id)>{{ $branch->name }}</option>
-                        @endforeach
-                    </select>
-                </label>
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Kategori</span><input class="input" type="text" name="category" value="{{ old('category', $service->category) }}"></label>
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Durasi (menit)</span><input class="input" type="number" min="15" name="duration_minutes" value="{{ old('duration_minutes', $service->duration_minutes) }}" required></label>
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Harga</span><input class="input" type="number" min="0" step="0.01" name="price" value="{{ old('price', $service->price) }}" required></label>
-                <label><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Status</span>
-                    <select class="input" name="is_active" required>
-                        <option value="1" @selected((string) old('is_active', (int) $service->is_active) === '1')>Aktif</option>
-                        <option value="0" @selected((string) old('is_active', (int) $service->is_active) === '0')>Nonaktif</option>
-                    </select>
-                </label>
-                <label style="grid-column: 1 / -1;"><span class="muted" style="display:block; margin-bottom:.4rem; font-weight:700;">Deskripsi</span><textarea class="input" name="description" rows="4">{{ old('description', $service->description) }}</textarea></label>
-
-                <section style="grid-column:1/-1; border-top:1px solid rgba(216,195,165,.55); padding-top:1rem;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.75rem;">
-                        <div>
-                            <h3 style="margin:0; font-size:1.05rem;">Addon / Tambah Layanan</h3>
-                            <p class="muted" style="margin:.25rem 0 0;">Pilih layanan tambahan yang dapat ditawarkan pada workflow booking, beserta tambahan durasi dan harga.</p>
-                        </div>
-                        <button class="button button-secondary" type="button" data-add-addon><i data-lucide="plus"></i> Tambah Addon</button>
-                    </div>
-                    <div data-addon-list style="display:grid; gap:.75rem;">
-                        @foreach ($addonRows as $index => $addon)
-                            <div class="grid grid-5" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
-                                <input type="hidden" name="addons[{{ $index }}][id]" value="{{ $addon['id'] ?? '' }}">
-                                <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Layanan tambahan</span>
-                                    <select class="input" name="addons[{{ $index }}][addon_service_id]">
-                                        <option value="">Pilih addon</option>
-                                        @foreach ($addonServices as $addonService)
-                                            <option value="{{ $addonService->id }}" @selected((string) ($addon['addon_service_id'] ?? '') === (string) $addonService->id)>{{ $addonService->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </label>
-                                <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Sub layanan custom</span><input class="input" type="text" name="addons[{{ $index }}][addon_name]" value="{{ $addon['addon_name'] ?? '' }}" placeholder="Contoh: Hair lotion"></label>
-                                <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Tambahan durasi</span><input class="input" type="number" min="0" name="addons[{{ $index }}][duration_minutes]" value="{{ $addon['duration_minutes'] ?? 0 }}"></label>
-                                <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Penyesuaian harga</span><input class="input" type="number" min="0" step="0.01" name="addons[{{ $index }}][price_adjustment]" value="{{ $addon['price_adjustment'] ?? 0 }}"></label>
-                                <div style="display:flex; gap:.5rem; align-items:end;">
-                                    <label style="flex:1;"><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Status</span>
-                                        <select class="input" name="addons[{{ $index }}][is_active]">
-                                            <option value="1" @selected((string) ($addon['is_active'] ?? 1) === '1')>Aktif</option>
-                                            <option value="0" @selected((string) ($addon['is_active'] ?? 1) === '0')>Nonaktif</option>
-                                        </select>
-                                    </label>
-                                    <button class="button button-ghost" type="button" data-remove-addon><i data-lucide="trash"></i></button>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </section>
-
-                <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end; gap:.75rem; flex-wrap:wrap;">
-                    <a class="button button-secondary" href="{{ route('admin.services.index') }}">Batal</a>
-                    <button class="button button-primary" type="submit"><i data-lucide="save"></i> Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <template data-addon-template>
-        <div class="grid grid-5" data-addon-row style="align-items:end; border:1px solid rgba(216,195,165,.55); border-radius:.75rem; padding:.85rem;">
-            <input type="hidden" data-name="id" value="">
-            <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Layanan tambahan</span>
-                <select class="input" data-name="addon_service_id">
-                    <option value="">Pilih addon</option>
-                    @foreach ($addonServices as $addonService)
-                        <option value="{{ $addonService->id }}">{{ $addonService->name }}</option>
-                    @endforeach
-                </select>
-            </label>
-            <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Sub layanan custom</span><input class="input" type="text" data-name="addon_name" placeholder="Contoh: Hair lotion"></label>
-            <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Tambahan durasi</span><input class="input" type="number" min="0" value="0" data-name="duration_minutes"></label>
-            <label><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Penyesuaian harga</span><input class="input" type="number" min="0" step="0.01" value="0" data-name="price_adjustment"></label>
-            <div style="display:flex; gap:.5rem; align-items:end;">
-                <label style="flex:1;"><span class="muted" style="display:block; margin-bottom:.35rem; font-weight:700;">Status</span>
-                    <select class="input" data-name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
-                </label>
-                <button class="button button-ghost" type="button" data-remove-addon><i data-lucide="trash"></i></button>
-            </div>
-        </div>
-    </template>
-
-    <script>
-        (() => {
-            const list = document.querySelector('[data-addon-list]');
-            const template = document.querySelector('[data-addon-template]');
-            const add = document.querySelector('[data-add-addon]');
-
-            const syncNames = () => {
-                list.querySelectorAll('[data-addon-row]').forEach((row, index) => {
-                    row.querySelectorAll('[data-name]').forEach((field) => {
-                        field.name = `addons[${index}][${field.dataset.name}]`;
-                    });
-                });
-            };
-
-            add?.addEventListener('click', () => {
-                list.append(template.content.firstElementChild.cloneNode(true));
-                syncNames();
-                window.lucide?.createIcons();
-            });
-            list?.addEventListener('click', (event) => {
-                if (! event.target.closest('[data-remove-addon]')) {
-                    return;
-                }
-                event.target.closest('[data-addon-row]')?.remove();
-                syncNames();
-            });
-            syncNames();
-        })();
-    </script>
+<x-ui.page-header :eyebrow="$service->groupLabel()" title="{{ $service->exists?'Edit variasi layanan':'Tambah layanan / variasi' }}" description="Kelola informasi, harga, tambahan, dan publikasi secara terpisah.">
+<x-slot name="actions"><a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'services',['service_group'=>$service->service_group]) }}">Kembali ke katalog</a></x-slot></x-ui.page-header>
+@if($errors->any())<div class="catalogue-notice catalogue-error" role="alert"><strong>Periksa kembali formulir.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+@if($service->exists)<p class="catalogue-notice"><strong>{{ \App\Models\Service::READINESS[$service->readiness()] }}</strong> · {{ $service->readinessReason() }} Publikasi: {{ $service->is_active?'tayang':'diarsipkan' }}.</p>@endif
+<nav class="catalogue-nav" aria-label="Bagian formulir layanan"><a class="button button-ghost" href="#service-information">Informasi utama</a><a class="button button-ghost" href="#service-variation">Variasi & harga</a><a class="button button-ghost" href="#service-addons">Tambahan</a><a class="button button-ghost" href="#service-publication">Publikasi</a></nav>
+@php
+    $addonRows=old('addons');
+    if($addonRows===null) $addonRows=$service->exists?$service->addOns->map(fn($addon)=>[
+        'id'=>$addon->id,'addon_service_id'=>$addon->addon_service_id,'addon_name'=>$addon->addon_name,
+        'label'=>$addon->displayName(),'duration_minutes'=>$addon->requires_confirmation && !$addon->duration_minutes ? '' : $addon->duration_minutes,
+        'price_adjustment'=>$addon->price_adjustment,'requires_confirmation'=>$addon->requires_confirmation,'is_active'=>(int)$addon->is_active,
+    ])->values()->all():[];
+    $addonChoices=$addonServices->map(fn($choice)=>['id'=>$choice->id,'name'=>$choice->name,'group'=>$choice->service_group,'code'=>$choice->catalog_code,
+        'duration'=>$choice->durationLabel(),'price'=>$choice->priceLabel(),'kind'=>\App\Models\Service::KINDS[$choice->catalogueKind()]])->values()->all();
+@endphp
+<form method="POST" enctype="multipart/form-data" action="{{ $service->exists?route('admin.services.update',$service):route('admin.services.store') }}" class="catalogue-form" data-service-form>
+@csrf @include('partials.admin-review-fields', ['reviewModule'=>'services']) @if($service->exists) @method('PUT') @endif
+<input type="hidden" name="catalogue_form" value="1"><input type="hidden" name="addons_present" value="1">
+<section class="card catalogue-section" id="service-information"><div class="card-body"><h2>Informasi utama</h2><p class="muted">Keluarga mengelompokkan variasi pada katalog. Setiap variasi tetap mempunyai pencatatan transaksi sendiri.</p>
+<div class="catalogue-fields">
+<label>Nama lengkap layanan<input class="input" name="name" value="{{ old('name',$service->name) }}" maxlength="255" required placeholder="Contoh: Pijat Laktasi Premium — 1 sesi"></label>
+<label>Keluarga layanan<input class="input" name="catalog_family" value="{{ old('catalog_family',$service->catalog_family) }}" maxlength="255" placeholder="Contoh: Pijat Laktasi Premium"><small>Gunakan nama keluarga yang sama untuk pilihan dari layanan yang sama.</small></label>
+<label>Kelompok layanan<select class="input" name="service_group" required>@foreach(\App\Support\ServiceGroup::LABELS as $key=>$label)<option value="{{ $key }}" @selected(old('service_group',$service->service_group)===$key)>{{ $label }}</option>@endforeach</select></label>
+<label>Kategori / usia<input class="input" name="category" value="{{ old('category',$service->category) }}" maxlength="255"></label>
+<label>Cabang<select class="input" name="branch_id"><option value="">Semua cabang</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" @selected((string)old('branch_id',$service->branch_id)===(string)$branch->id)>{{ $branch->name }}</option>@endforeach</select></label>
+<label>Foto layanan<input class="input" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, atau WebP; maksimal 5 MB.</small></label>
+<label class="wide">Deskripsi / cakupan<textarea class="input" name="description" rows="4">{{ old('description',$service->description) }}</textarea></label>
+</div></div></section>
+<section class="card catalogue-section" id="service-variation"><div class="card-body"><h2>Variasi & harga</h2>
+<div class="catalogue-fields">
+<label>Nama variasi<input class="input" name="variant_label" value="{{ old('variant_label',$service->variant_label) }}" maxlength="255" placeholder="Contoh: 1 sesi · 45 menit"></label>
+<label>Jenis layanan<select class="input" name="catalog_kind">@foreach(\App\Models\Service::KINDS as $key=>$label)<option value="{{ $key }}" @selected(old('catalog_kind',$service->catalogueKind())===$key)>{{ $label }}</option>@endforeach</select><small>Paket dan tambahan tetap melalui konfirmasi admin.</small></label>
+<label>Jumlah sesi / hari / kunjungan<input class="input" name="package_quantity" type="number" min="1" max="100" value="{{ old('package_quantity',data_get($service->catalog_metadata,'package_quantity',1)) }}" required></label>
+<label>Satuan paket<select class="input" name="package_unit">@foreach(['sesi'=>'Sesi','hari'=>'Hari','kunjungan'=>'Kunjungan','paket'=>'Paket'] as $key=>$label)<option value="{{ $key }}" @selected(old('package_unit',data_get($service->catalog_metadata,'package_unit','sesi'))===$key)>{{ $label }}</option>@endforeach</select></label>
+<label>Harga variasi (Rp)<input class="input" name="price" type="number" min="0" step="0.01" value="{{ old('price',$service->price) }}"><small>Harga untuk seluruh pilihan ini. Kosong berarti belum dikonfirmasi; angka 0 berarti gratis.</small></label>
+<label>Durasi per sesi (menit)<input class="input" name="duration_minutes" type="number" min="15" max="600" value="{{ old('duration_minutes',$service->duration_minutes) }}"><small>Kosongkan bila belum diketahui. Wajib diisi untuk memilih jadwal web.</small></label>
+<label class="wide">Alur pemesanan<select class="input" name="booking_mode"><option value="online" @selected(old('booking_mode',$service->booking_mode ?? 'admin')==='online')>Pilih jadwal melalui web</option><option value="admin" @selected(old('booking_mode',$service->booking_mode ?? 'admin')==='admin')>Konfirmasi admin terlebih dahulu</option></select><small data-mode-help>Siap dipesan berarti harga dan durasi sudah tersedia. Jadwal tetap diatur pada menu Jadwal Tersedia.</small></label>
+</div></div></section>
+<section class="card catalogue-section" id="service-addons"><div class="card-body">
+<div class="catalogue-addon-heading"><div><h2>Tambahan layanan</h2><p class="muted">Pilih dari katalog pada kelompok yang sama atau isi tambahan khusus. Pastikan harga dan durasinya sebelum ditawarkan.</p></div><button class="button button-secondary" type="button" data-add-addon>Tambah tambahan</button></div>
+<p class="catalogue-notice">Tambahan yang perlu konfirmasi belum ditawarkan pada pilihan booking. Riwayat tambahan tetap tersimpan ketika dilepas.</p>
+<div class="catalogue-addon-list" data-addon-list>@foreach($addonRows as $index=>$addon)@include('admin.services.partials.addon-row')@endforeach</div>
+<p class="muted" data-addon-empty @if(count($addonRows)) hidden @endif>Belum ada tambahan untuk layanan ini.</p>
+</div></section>
+<section class="card catalogue-section" id="service-publication"><div class="card-body"><h2>Publikasi</h2><div class="catalogue-fields">
+<label>Status katalog<select class="input" name="is_active" required><option value="1" @selected((string)old('is_active',(int)$service->is_active)==='1')>Tayang</option><option value="0" @selected((string)old('is_active',(int)$service->is_active)==='0')>Diarsipkan</option></select><small>Publikasi menentukan apakah pelanggan melihat variasi ini. Kesiapan pemesanan tetap mengikuti data dan alurnya.</small></label>
+<div class="catalogue-notice">Perubahan berlaku pada katalog. Nilai harga yang sudah tersimpan pada transaksi tidak dihitung ulang.</div>
+</div></div></section>
+<div class="catalogue-save"><a class="button button-ghost" href="{{ \App\Support\AdminReviewContext::back(request(),'services',['service_group'=>$service->service_group]) }}">Batal</a><button class="button button-primary" type="submit">Simpan variasi</button></div>
+</form>
+<template data-addon-template>@include('admin.services.partials.addon-row',['index'=>'__INDEX__','addon'=>['requires_confirmation'=>true,'is_active'=>1]])</template>
+<dialog class="catalogue-picker" data-addon-picker aria-labelledby="addon-picker-title">
+<div class="catalogue-addon-heading"><h2 id="addon-picker-title">Pilih tambahan dari katalog</h2><button class="button button-ghost" type="button" data-close-picker aria-label="Tutup pencarian tambahan">Tutup</button></div>
+<label>Cari tambahan<input class="input" type="search" data-picker-search placeholder="Nama, kode, atau jenis layanan"></label><small class="muted">Pilihan yang dipasang pada baris lain tidak ditampilkan.</small><p class="muted" data-picker-count></p><div class="catalogue-picker-results" data-picker-results></div>
+</dialog>
+<script type="application/json" id="addon-catalogue-data">@json($addonChoices)</script>
 @endsection
+@push('scripts')<script src="{{ asset('js/admin-services.js') }}" defer></script>@endpush

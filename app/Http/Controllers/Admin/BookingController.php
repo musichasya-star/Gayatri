@@ -12,12 +12,17 @@ use App\Models\Promo;
 use App\Models\Service;
 use App\Models\Therapist;
 use App\Services\CRM\AuditLogService;
+use App\Services\CRM\BookingReports;
 use App\Services\CRM\BookingService;
+use App\Services\CRM\HomeService;
 use App\Support\BookingStatus;
+use App\Support\OperationalNavigation;
 use App\Support\PaymentStatus;
+use App\Support\ServiceGroup;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
@@ -30,10 +35,14 @@ class BookingController extends Controller
 
     public function index(Request $request): View
     {
+        $request->validate(['attention' => ['nullable', 'in:pending'], 'date' => ['nullable', 'date_format:Y-m-d'], 'search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(BookingStatus::all())], 'page' => ['nullable', 'integer', 'min:1'], 'service_group' => ['nullable', Rule::in(array_keys(ServiceGroup::LABELS))]]);
         $bookings = Booking::query()
-            ->with(['customer', 'service', 'therapist', 'branch'])
+            ->with(['customer', 'service', 'therapist', 'branch', 'addOns'])
+            ->when($request->input('attention') === 'pending', fn ($q) => $q->whereIn('bookings.id', app(BookingReports::class)->bookings()->select('bookings.id')->whereIn('status', ['draft', 'pending', 'pending_confirmation'])))
             ->when($request->filled('date'), fn ($query) => $query->whereDate('booking_date', $request->date('date')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
+            ->when($request->filled('service_group'), fn ($query) => $query->whereHas('service', fn ($services) => $services->where('service_group', $request->input('service_group'))))
+            ->when($request->filled('search'), fn ($q) => $q->where(fn ($q) => $q->where('booking_code', 'like', '%'.$request->input('search').'%')->orWhereHas('customer', fn ($q) => $q->where('name', 'like', '%'.$request->input('search').'%'))))
             ->latest('booking_date')
             ->paginate(15)
             ->withQueryString();
@@ -77,7 +86,7 @@ class BookingController extends Controller
             return back()->withErrors(['booking' => $exception->getMessage()])->withInput();
         }
 
-        return redirect()->route('admin.bookings.index')->with('status', 'Booking berhasil dibuat.');
+        return redirect(OperationalNavigation::back($request))->with('status', 'Booking berhasil dibuat.');
     }
 
     public function edit(Booking $booking): View
@@ -97,7 +106,7 @@ class BookingController extends Controller
             return back()->withErrors(['booking' => $exception->getMessage()])->withInput();
         }
 
-        return redirect()->route('admin.bookings.index')->with('status', 'Booking berhasil diperbarui.');
+        return redirect(OperationalNavigation::back($request))->with('status', 'Booking berhasil diperbarui.');
     }
 
     public function destroy(Request $request, Booking $booking): RedirectResponse
@@ -106,15 +115,17 @@ class BookingController extends Controller
         $this->bookingService->delete($booking);
         $this->auditLogService->log($request->user(), 'booking.delete', null, $request, $oldValues, [], 'Booking deleted');
 
-        return redirect()->route('admin.bookings.index')->with('status', 'Booking berhasil dihapus.');
+        return redirect(OperationalNavigation::back($request))->with('status', 'Booking berhasil dihapus.');
     }
 
     public function calendar(Request $request): View
     {
+        $request->validate(['date' => ['nullable', 'date_format:Y-m-d'], 'search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(BookingStatus::all())], 'page' => ['nullable', 'integer', 'min:1'], 'service_group' => ['nullable', Rule::in(array_keys(ServiceGroup::LABELS))]]);
         $date = $request->date('date') ?: now();
         $bookings = Booking::query()
             ->with(['customer', 'service', 'therapist'])
             ->whereDate('booking_date', $date->toDateString())
+            ->when($request->filled('service_group'), fn ($query) => $query->whereHas('service', fn ($services) => $services->where('service_group', $request->input('service_group'))))
             ->orderBy('start_time')
             ->get();
 
@@ -125,9 +136,11 @@ class BookingController extends Controller
     {
         return view('admin.bookings.form', [
             'booking' => $booking,
+            'homeSettings' => app(HomeService::class)->settings(),
             'customers' => Customer::orderBy('name')->get(),
             'branches' => Branch::orderBy('name')->get(),
             'services' => Service::query()
+                ->bookable()
                 ->with(['activeAddOns.addonService'])
                 ->where('is_active', true)
                 ->orderBy('name')
@@ -136,7 +149,7 @@ class BookingController extends Controller
             'promos' => Promo::query()->where('is_active', true)->orderBy('title')->get(),
             'availabilitySlots' => AvailabilitySlot::query()
                 ->with(['service', 'branch', 'therapist'])
-                ->where('status', 'available')
+                ->where(fn ($query) => $query->where('status', 'available')->orWhere(fn ($held) => $held->whereKey($booking->availability_slot_id)->where('status', '!=', 'blocked')))
                 ->whereDate('slot_date', '>=', now()->toDateString())
                 ->orderBy('slot_date')
                 ->orderBy('start_time')
@@ -149,7 +162,14 @@ class BookingController extends Controller
 
     private function validatedData(Request $request): array
     {
+        $existing = $request->route('booking');
+        $expected = $existing instanceof Booking ? $existing->payment_status : PaymentStatus::UNPAID;
+        if ($request->input('payment_status') !== $expected) {
+            throw ValidationException::withMessages(['payment_status' => 'Gunakan jurnal transaksi untuk mencatat pembayaran, DP, pelunasan atau refund.']);
+        }
+
         return $request->validate([
+            ...HomeService::rules(),
             'customer_id' => ['required', 'exists:customers,id'],
             'branch_id' => ['nullable', 'exists:branches,id'],
             'service_id' => ['required', 'exists:services,id'],

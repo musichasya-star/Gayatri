@@ -3,6 +3,10 @@
 @section('title', 'AI Logs - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
+    @if(! app(\App\Services\AI\AiInteractionPolicy::class)->allowsLegacyAutomation())
+        @include('admin.ai.logs.operations')
+    @else
     <x-ui.page-header eyebrow="AI Management" title="AI Logs" description="Riwayat prompt, response, confidence, fallback, dan sumber knowledge AI.">
         <x-slot name="actions">
             <form method="POST" action="{{ route('admin.ai.logs.clear') }}" onsubmit="return confirm('Hapus semua AI logs? Aksi ini tidak menghapus conversation, customer, atau booking.');">
@@ -19,7 +23,7 @@
                 @forelse($logs as $log)
                     <tr>
                         <td data-label="Waktu">{{ $log->created_at->format('d M Y H:i') }}</td>
-                        <td data-label="Status"><span class="badge {{ $log->status === 'success' ? 'badge-green' : 'badge-red' }}">{{ $log->status }}</span></td>
+                        <td data-label="Status"><span class="badge {{ $log->status === 'success' ? 'badge-green' : 'badge-red' }}">{{ $log->status }}</span>@if(data_get($log->meta,'routing'))<div class="muted">{{ \App\Support\AiDomain::LABELS[data_get($log->meta,'routing.domain','general')] ?? 'Klarifikasi' }} · {{ data_get($log->meta,'routing.intent') }}</div><small>{{ data_get($log->meta,'routing.reason_code') }}</small>@endif</td>
                         <td data-label="Persona">{{ $log->persona?->name ?: '-' }}</td>
                         <td data-label="Prompt">{{ Str::limit($log->prompt, 70) }}</td>
                         <td data-label="Response">{{ Str::limit($log->response, 90) }}</td>
@@ -48,4 +52,5 @@
             </div>
         </div>
     </div></div>
+    @endif
 @endsection

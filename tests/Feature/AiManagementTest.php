@@ -14,10 +14,14 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiManagementTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     public function test_owner_can_create_and_activate_single_persona(): void
@@ -181,7 +185,7 @@ class AiManagementTest extends TestCase
         $service = new AiService(
             new class extends KnowledgeRetrievalService
             {
-                public function retrieve(string $query, int $limit = 5): Collection
+                public function retrieve(string $query, int $limit = 5, ?string $domain = null, bool $includeDemo = false): Collection
                 {
                     throw new \RuntimeException('Provider down');
                 }

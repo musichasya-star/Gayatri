@@ -16,10 +16,14 @@ use App\Support\BookingStatus;
 use App\Support\CustomerStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiAutomationUiTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     public function test_admin_can_view_data_automation_pages_and_create_rule(): void

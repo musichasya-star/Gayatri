@@ -54,7 +54,7 @@ class PromoController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'code' => ['nullable', 'string', 'max:255', Rule::unique('promos', 'code')->ignore($promo)],
             'type' => ['required', 'in:fixed,percent'],
-            'value' => ['required', 'numeric', 'min:0'],
+            'value' => ['required', 'numeric', 'min:0', Rule::when($request->input('type') === 'percent', ['max:100'])],
             'quota' => ['nullable', 'integer', 'min:1'],
             'description' => ['nullable', 'string', 'max:5000'],
             'start_at' => ['nullable', 'date'],

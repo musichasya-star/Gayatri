@@ -22,6 +22,7 @@ class Reminder extends Model
         'sent_at',
         'failed_reason',
         'payload',
+        'message_id',
     ];
 
     protected function casts(): array

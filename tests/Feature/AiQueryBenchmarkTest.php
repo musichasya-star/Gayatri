@@ -18,13 +18,18 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiQueryBenchmarkTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     private static int $conversationSequence = 1;
+
     private array $scenarioResults = [];
 
     protected function setUp(): void

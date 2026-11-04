@@ -1,135 +1,44 @@
 @extends('layouts.app')
-
-@section('title', 'Dashboard - Gayatri CRM')
-
+@section('title','Dashboard - Gayatri CRM')
 @section('content')
-    <x-ui.page-header
-        eyebrow="Dashboard Overview"
-        title="Ringkasan Bisnis {{ $rangeLabel }}"
-        description="Pantau customer, booking, WhatsApp, campaign, dan aktivitas AI dalam satu dashboard premium yang mudah dibaca."
-    >
-        <x-slot name="actions">
-            <a class="button button-secondary" href="{{ route('admin.reports.index') }}"><i data-lucide="bar-chart-3"></i> Reports</a>
-        </x-slot>
-    </x-ui.page-header>
-
-    <div class="card" style="margin-bottom:1rem;"><div class="card-body"><form method="GET" class="grid grid-4"><select class="input" name="range"><option value="today" @selected($range==='today')>Hari ini</option><option value="week" @selected($range==='week')>Minggu ini</option><option value="month" @selected($range==='month')>Bulan ini</option><option value="custom" @selected($range==='custom')>Custom</option></select><input class="input" type="date" name="start_date" value="{{ $startDate }}"><input class="input" type="date" name="end_date" value="{{ $endDate }}"><button class="button button-secondary" type="submit"><i data-lucide="filter"></i> Terapkan</button></form></div></div>
-
-    <section class="grid grid-4">
-        <x-ui.stat-card icon="users" label="Total Customer" value="{{ number_format($totalCustomers) }}" note="+{{ $newCustomers }} customer baru periode ini" badge="CRM" />
-        <x-ui.stat-card icon="message-circle" label="Chat Masuk" value="{{ $incomingChats }}" note="{{ $unansweredChats }} conversation unread" badge="WA" />
-        <x-ui.stat-card icon="calendar-check" label="Booking Periode" value="{{ $bookingsInRange }}" note="Hari ini {{ $bookingsToday }}, minggu {{ $bookingsWeek }}, bulan {{ $bookingsMonth }}" badge="Booking" />
-        <x-ui.stat-card icon="star" label="Rating Rata-Rata" value="{{ $averageRating ?: '-' }}" note="{{ $feedbackCount }} feedback, {{ $complaintCount }} komplain" badge="Feedback" />
-    </section>
-
-    <section class="grid grid-4" style="margin-top:1rem;">
-        <x-ui.stat-card icon="banknote" label="Estimasi Revenue" value="Rp {{ number_format($estimatedRevenue,0,',','.') }}" note="Booking non-cancelled/no-show" badge="Sales" />
-        <x-ui.stat-card icon="phone-forwarded" label="Follow-Up Pending" value="{{ $pendingFollowups->count() }}" note="Open follow-up prioritas" badge="Follow-Up" />
-        <x-ui.stat-card icon="megaphone" label="Campaign Aktif" value="{{ $activeCampaigns }}" note="Scheduled dan running" badge="Campaign" />
-        <x-ui.stat-card icon="bot" label="AI Answered" value="{{ $aiAnswered }}" note="{{ $humanTakeover }} escalated/human takeover" badge="AI" />
-    </section>
-
-    @if($wahaDisconnected > 0 || $failedOutgoingMessages > 0)
-        <div class="card" style="margin-top:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;"><span><strong>Reliability Alert:</strong> {{ $wahaDisconnected }} session WAHA tidak connected, {{ $failedOutgoingMessages }} pesan outgoing gagal.</span><a class="button button-secondary" href="{{ route('admin.whatsapp.session') }}">Cek WAHA</a></div></div>
-    @endif
-
-    @if($incomingBookingCount > 0 || $incomingApprovalCount > 0)
-        <div id="notifikasi-operasional" class="card" style="margin-top:1rem;border-color:rgba(201,122,106,.45);background:linear-gradient(135deg,rgba(255,248,240,.96),rgba(255,255,255,.98));">
-            <div class="card-body">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
-                    <div>
-                        <span class="badge badge-red"><i data-lucide="bell-ring"></i> Notifikasi Operasional</span>
-                        <h2 class="section-title" style="margin-top:.65rem;">{{ $incomingBookingCount + $incomingApprovalCount }} request customer perlu dicek</h2>
-                        <p style="margin:0;color:var(--muted);">Booking baru, perubahan jadwal, dan pembatalan dari customer yang masih perlu tindakan admin.</p>
-                    </div>
-                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-                        <a class="button button-secondary" href="{{ route('admin.bookings.index') }}"><i data-lucide="calendar-check"></i> Lihat Booking</a>
-                        <a class="button button-secondary" href="{{ route('admin.ai.data-automation.approvals.index') }}"><i data-lucide="workflow"></i> Review Request</a>
-                    </div>
-                </div>
-                <ul class="soft-list">
-                    @foreach($incomingBookings as $booking)
-                        <li class="soft-list-item">
-                            <span>
-                                <span class="badge badge-green">Booking baru</span>
-                                <strong>{{ $booking->customer?->name ?: 'Customer' }}</strong>
-                                - {{ $booking->booking_code }}
-                                - {{ $booking->service?->name ?: 'Layanan belum dipilih' }}
-                                - {{ $booking->booking_date?->format('d M Y') ?: '-' }} {{ substr((string) $booking->start_time, 0, 5) ?: '-' }}
-                            </span>
-                            <span class="badge badge-gold">{{ $booking->status }}</span>
-                        </li>
-                    @endforeach
-                    @foreach($incomingApprovals as $approval)
-                        @php($bookingData = $approval->proposed_data['booking'] ?? [])
-                        <li class="soft-list-item">
-                            <span>
-                                <span class="badge {{ $approval->action === 'cancel_booking' ? 'badge-red' : 'badge-gold' }}">{{ $approval->action === 'cancel_booking' ? 'Request pembatalan' : 'Perubahan jadwal' }}</span>
-                                <strong>{{ $approval->customer?->name ?: 'Customer' }}</strong>
-                                - {{ $bookingData['booking_code'] ?? 'Booking' }}
-                                @if($approval->action === 'reschedule_booking')
-                                    - dari {{ $bookingData['current_booking_date'] ?? '-' }} {{ substr((string) ($bookingData['current_start_time'] ?? ''), 0, 5) }} ke {{ $bookingData['booking_date'] ?? '-' }} {{ substr((string) ($bookingData['start_time'] ?? ''), 0, 5) }}
-                                @else
-                                    - {{ $bookingData['booking_date'] ?? $bookingData['active_booking_date'] ?? '-' }} {{ substr((string) ($bookingData['start_time'] ?? $bookingData['active_start_time'] ?? ''), 0, 5) }}
-                                @endif
-                            </span>
-                            <a class="button button-secondary" href="{{ route('admin.ai.data-automation.approvals.show', $approval) }}">Review</a>
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-        </div>
-    @endif
-
-    <section class="grid grid-3" style="margin-top: 1rem;">
-        <div class="card" style="grid-column: span 2;">
-            <div class="card-body">
-                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
-                    <h2 class="section-title">Trend Booking & Chat</h2>
-                    <span class="badge badge-gold"><i data-lucide="calendar-days"></i> {{ $rangeLabel }}</span>
-                </div>
-                <div class="grid" style="grid-template-columns: repeat(7, 1fr); align-items: end; min-height: 16rem; gap: .65rem;">
-                    @foreach ($trend as $item)
-                        <div title="{{ $item['label'] }}: {{ $item['bookings'] }} booking, {{ $item['chats'] }} chat" style="height: {{ $item['height'] }}%; min-height: 4rem; border-radius: 1rem 1rem .45rem .45rem; background: linear-gradient(180deg, var(--gold), var(--soft-brown)); opacity: .9;"></div>
-                    @endforeach
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body">
-                <h2 class="section-title">AI Alert</h2>
-                <ul class="soft-list">
-                    <li class="soft-list-item"><span>AI answered hari ini</span><span class="badge badge-green">{{ $aiAnswered }}</span></li>
-                    <li class="soft-list-item"><span>Human takeover/escalated</span><span class="badge badge-gold">{{ $humanTakeover }}</span></li>
-                    <li class="soft-list-item"><span>Komplain feedback</span><span class="badge badge-red">{{ $complaintCount }}</span></li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <section class="grid grid-2" style="margin-top: 1rem;">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="section-title">Booking Hari Ini</h2>
-                <table class="table-card">
-                    <thead>
-                        <tr><th>Customer</th><th>Layanan</th><th>Jam</th><th>Status</th></tr>
-                    </thead>
-                    <tbody>
-                        @forelse($todayBookings as $booking)<tr><td data-label="Customer">{{ $booking->customer?->name }}</td><td data-label="Layanan">{{ $booking->service?->name ?: '-' }}</td><td data-label="Jam">{{ substr((string) $booking->start_time,0,5) }}</td><td data-label="Status"><span class="badge badge-gold">{{ $booking->status }}</span></td></tr>@empty<tr><td colspan="4" style="text-align:center;padding:2rem;">Belum ada booking hari ini.</td></tr>@endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body">
-                <h2 class="section-title">Pending Follow-Up</h2>
-                <ul class="soft-list">
-                    @forelse($pendingFollowups as $followup)<li class="soft-list-item"><span>{{ $followup->customer?->name }} - {{ $followup->title }}</span><a class="button button-secondary" href="{{ route('admin.followups.index') }}">Follow-Up</a></li>@empty<li class="soft-list-item"><span>Tidak ada follow-up pending.</span><span class="badge badge-green">Clear</span></li>@endforelse
-                </ul>
-            </div>
-        </div>
-    </section>
+@include('partials.admin-workbench-assets')
+<x-ui.page-header eyebrow="Dashboard" title="Ringkasan Bisnis {{ $rangeLabel }}" description="Mulai dari pekerjaan yang perlu ditangani, lalu tinjau hasil bisnis pada periode pilihan."><x-slot name="actions"><a class="button button-secondary" href="{{ route('admin.reports.index',['start_date'=>$startDate,'end_date'=>$endDate]) }}">Laporan & rincian</a></x-slot></x-ui.page-header>
+<section id="notifikasi-operasional" class="ops-record" aria-labelledby="work-title">
+<div class="wb-heading"><div><h2 id="work-title">Pekerjaan hari ini & antrean aktif</h2><p>Kondisi saat ini dari semua tanggal, terpisah dari periode laporan. Tugas modul mengecualikan data demo.</p></div><span class="wb-chip">{{ now()->format('d M Y H:i') }} WIB</span></div>
+<div class="wb-tasks">
+@foreach([
+ ['Booking hari ini',$work['bookings_today'],route('admin.bookings.calendar',['date'=>today()->toDateString()]),'Jadwal aktif untuk dilayani.'],
+ ['Booking menunggu konfirmasi',$work['bookings_pending'],route('admin.bookings.index',['attention'=>'pending']),'Draf dan permintaan pelanggan dari seluruh tanggal.'],
+ ['Percakapan perlu admin',$work['needs_admin'],route('admin.inbox',['need_admin'=>1]),'Kebutuhan bantuan tetap tercatat meskipun chat sudah dibaca.'],
+ ['Follow-up jatuh tempo',$work['followups_due'],route('admin.followups.index',['status'=>'open','due'=>'today']),'Tugas terbuka yang jatuh tempo hingga hari ini.'],
+] as [$label,$count,$url,$note])<a class="wb-task" href="{{ $url }}"><span>{{ $label }}</span><strong>{{ number_format($count) }}</strong><small>{{ $note }}</small></a>@endforeach
+</div>
+<div class="wb-two">
+<section class="card"><div class="card-body"><h2 class="section-title">Laundry</h2><div class="wb-row"><div><strong>{{ $work['laundry_overdue'] }} melewati estimasi selesai</strong><small>{{ $work['laundry_qc'] }} perlu QC · {{ $work['laundry_ready'] }} siap diserahkan</small></div><a class="button button-secondary" href="{{ route('admin.laundry.operations') }}">Buka antrean</a></div><div class="wb-row"><div>{{ $work['laundry_proofs'] }} bukti pembayaran menunggu pemeriksaan</div><a href="{{ route('admin.laundry.requests.proofs',['status'=>'pending']) }}">Periksa bukti →</a></div></div></section>
+<section class="card"><div class="card-body"><h2 class="section-title">Rental</h2><div class="wb-row"><div><strong>{{ $work['rental_overdue'] }} terlambat kembali</strong><small>{{ $work['rental_inspection'] }} pesanan menunggu pemeriksaan pengembalian</small></div><a class="button button-secondary" href="{{ route('admin.rentals.operations') }}">Buka peringatan</a></div><div class="wb-row"><div>{{ $work['rental_proofs'] }} bukti pembayaran menunggu pemeriksaan</div><a href="{{ route('admin.rentals.payment-reviews') }}">Periksa bukti →</a></div></div></section>
+</div>
+@if($wahaDisconnected || $failedOutgoingMessages)<p class="wb-scope"><strong>WhatsApp perlu ditinjau.</strong> {{ $wahaDisconnected }} sesi pada catatan aplikasi belum terhubung · {{ $failedOutgoingMessages }} pesan memiliki catatan kegagalan. <a href="{{ route('admin.whatsapp.monitor') }}">Buka Monitoring WhatsApp →</a><br><small>Status ini berasal dari catatan aplikasi; pemeriksaan koneksi langsung tersedia di monitoring.</small></p>@endif
+</section>
+<div class="wb-heading"><h2>Ringkasan periode</h2><span class="muted">{{ $startDate }}–{{ $endDate }}</span></div>
+<section class="card"><div class="card-body"><form method="GET" class="ops-filters"><label>Periode<select class="input" name="range"><option value="today" @selected($range==='today')>Hari ini</option><option value="week" @selected($range==='week')>Minggu ini</option><option value="month" @selected($range==='month')>Bulan ini</option><option value="custom" @selected($range==='custom')>Tanggal pilihan</option></select></label><label>Dari tanggal<input class="input" type="date" name="start_date" value="{{ $startDate }}"></label><label>Sampai tanggal<input class="input" type="date" name="end_date" value="{{ $endDate }}"></label><button class="button button-secondary">Terapkan</button></form><p class="ops-subtitle">Tanggal pilihan digunakan ketika periode “Tanggal pilihan” dipilih.</p></div></section>
+<div class="wb-tasks">
+<a class="wb-task" href="{{ route('admin.reports.show',['type'=>'bookings','start_date'=>$startDate,'end_date'=>$endDate]) }}"><span>Booking periode</span><strong>{{ $bookingsInRange }}</strong><small>Menurut tanggal pelayanan; rincian memuat status masing-masing booking.</small></a>
+<a class="wb-task" href="{{ route('admin.reports.show',['type'=>'payments','start_date'=>$startDate,'end_date'=>$endDate]) }}"><span>Pembayaran booking tercatat</span><strong style="font-size:1.3rem">Rp {{ number_format($bookingCash,0,',','.') }}</strong><small>Penerimaan dikurangi refund menurut tanggal transaksi. Saldo awal historis bukan uang masuk baru.</small></a>
+<div class="wb-task"><span>Chat masuk</span><strong>{{ $incomingChats }}</strong><small>Pesan masuk pada periode; {{ $unansweredChats }} percakapan belum dibaca saat ini.</small></div>
+<div class="wb-task"><span>Rating Rata-Rata</span><strong>{{ $averageRating ?: '—' }}</strong><small>{{ $feedbackCount }} penilaian · {{ $complaintCount }} komplain dalam periode.</small></div>
+</div>
+<div class="wb-module-links" aria-label="Dashboard modul"><a href="{{ route('admin.laundry.dashboard',['start_date'=>min(today()->toDateString(),$startDate),'end_date'=>min(today()->toDateString(),$endDate)]) }}">Dashboard Laundry</a><a href="{{ route('admin.rentals.dashboard',['start_date'=>min(today()->toDateString(),$startDate),'end_date'=>min(today()->toDateString(),$endDate)]) }}">Dashboard Rental</a><a href="{{ route('admin.therapist-fees.index',['start_date'=>min(today()->toDateString(),$startDate),'end_date'=>min(today()->toDateString(),$endDate)]) }}">Laporan fee terapis</a></div>
+<div class="wb-two" style="margin-top:1rem">
+<section class="card"><div class="card-body"><h2 class="section-title">Booking Hari Ini</h2>@forelse($todayBookings as $booking)<div class="wb-row"><div><strong>{{ $booking->booking_code }} · {{ substr((string)$booking->start_time,0,5) }}</strong><small>{{ $booking->customer?->name }} · {{ $booking->service?->name }}<br>{{ \App\Support\BookingStatus::label($booking->status) }}</small></div><a href="{{ route('admin.bookings.edit',$booking) }}">Buka booking →</a></div>@empty<p class="muted">Belum ada booking hari ini.</p>@endforelse<a class="ops-subtitle" href="{{ route('admin.bookings.calendar',['date'=>today()->toDateString()]) }}">Lihat seluruh jadwal hari ini →</a></div></section>
+<section class="card"><div class="card-body"><h2 class="section-title">Follow-up terdekat</h2><p class="muted">{{ $openFollowupCount }} follow-up terbuka; menampilkan maksimal 5 terdekat.</p>@forelse($pendingFollowups as $followup)<div class="wb-row"><div><strong>{{ $followup->title }}</strong><small>{{ $followup->customer?->name }} · {{ $followup->due_at?->format('d M Y H:i') ?: 'Belum dijadwalkan' }}</small></div></div>@empty<p class="muted">Tidak ada follow-up terbuka.</p>@endforelse<a class="ops-subtitle" href="{{ route('admin.followups.index',['status'=>'open']) }}">Kelola follow-up →</a></div></section>
+</div>
+<details class="ops-section"><summary>Tren booking, chat, dan indikator bisnis</summary><div class="ops-section-body">
+@php($peak=max(1,...array_column($trend,'bookings'),...array_column($trend,'chats')))
+<p class="muted">Emas: booking · cokelat: chat. Angka di bawah setiap batang menunjukkan booking / chat.</p><div class="wb-chart">@foreach($trend as $point)<div class="wb-chart-point"><div class="wb-chart-bars"><i style="height:{{ $point['bookings']/$peak*100 }}%" title="{{ $point['bookings'] }} booking"></i><i style="height:{{ $point['chats']/$peak*100 }}%" title="{{ $point['chats'] }} chat"></i></div><span>{{ $point['label'] }}</span><span>{{ $point['bookings'] }} / {{ $point['chats'] }}</span></div>@endforeach</div>
+<div class="wb-tasks"><div class="wb-task"><span>Total pelanggan</span><strong>{{ $totalCustomers }}</strong><small>{{ $newCustomers }} baru pada periode; termasuk data demo.</small></div><div class="wb-task"><span>Estimasi Revenue · nilai booking</span><strong style="font-size:1.2rem">Rp {{ number_format($estimatedRevenue,0,',','.') }}</strong><small>Nilai booking setelah diskon termasuk ongkos, bukan penerimaan atau laba. {{ $historicalEstimateCount }} booking belum memiliki snapshot harga dan memakai estimasi katalog.</small></div><div class="wb-task"><span>Campaign Aktif</span><strong>{{ $activeCampaigns }}</strong><small>Terjadwal atau berjalan saat ini; bukan jumlah pesan terkirim.</small></div><div class="wb-task"><span>AI Answered</span><strong>{{ $aiAnswered }}</strong><small>{{ $humanTakeover }} eskalasi pada periode; termasuk log simulasi. Hasil AI dipisahkan dari keberhasilan pengiriman.</small></div></div>
+</div></details>
+<details class="ops-section"><summary>Permintaan booking & arsip perubahan AI lama</summary><div class="ops-section-body"><h2 class="section-title">Notifikasi Operasional</h2><p>{{ $incomingBookingCount + $incomingApprovalCount }} request customer perlu dicek.</p><p class="muted">Daftar perubahan AI lama adalah arsip peninjauan. Pengamanan transaksi AI tetap berlaku.</p>
+@foreach($incomingBookings as $booking)<div class="wb-row"><div><strong>{{ $booking->booking_code }}</strong><small>{{ $booking->customer?->name }} · {{ $booking->booking_date?->format('d M Y') }} {{ substr((string)$booking->start_time,0,5) }}</small></div><a href="{{ route('admin.bookings.edit',$booking) }}">Tinjau booking</a></div>@endforeach
+@foreach($incomingApprovals as $approval)@php($bookingData=$approval->proposed_data['booking'] ?? [])<div class="wb-row"><div><strong>{{ $approval->action==='cancel_booking' ? 'Request pembatalan' : 'Perubahan jadwal' }} · {{ $bookingData['booking_code'] ?? 'Booking' }}</strong><small>{{ $approval->customer?->name }} · {{ $bookingData['booking_date'] ?? $bookingData['active_booking_date'] ?? '—' }} {{ substr((string)($bookingData['start_time'] ?? $bookingData['active_start_time'] ?? ''),0,5) }}</small></div><a href="{{ route('admin.ai.data-automation.approvals.show',$approval) }}">Lihat arsip</a></div>@endforeach
+</div></details>
 @endsection

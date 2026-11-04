@@ -57,6 +57,7 @@ class AppSettingService
     public function applyToConfig(): void
     {
         config([
+            'whatsapp.provider' => $this->get('whatsapp.provider', config('whatsapp.provider', 'waha')),
             'ai.provider' => $this->get('ai.provider', config('ai.provider')),
             'ai.api_key' => $this->get('ai.api_key', config('ai.api_key')),
             'ai.model' => $this->get('ai.model', config('ai.model')),
@@ -68,11 +69,17 @@ class AppSettingService
             'waha.webhook_secret' => $this->get('waha.webhook_secret', config('waha.webhook_secret')),
             'waha.webhook_base_url' => $this->get('waha.webhook_base_url', config('waha.webhook_base_url')),
             'waha.timeout' => (int) $this->get('waha.timeout', config('waha.timeout', 30)),
+            'baileys.base_url' => $this->get('baileys.base_url', config('baileys.base_url')),
+            'baileys.api_key' => $this->get('baileys.api_key', config('baileys.api_key')),
+            'baileys.default_session' => $this->get('baileys.default_session', config('baileys.default_session', 'gayatri-main')),
+            'baileys.webhook_secret' => $this->get('baileys.webhook_secret', config('baileys.webhook_secret')),
+            'baileys.webhook_base_url' => $this->get('baileys.webhook_base_url', config('baileys.webhook_base_url')),
+            'baileys.timeout' => (int) $this->get('baileys.timeout', config('baileys.timeout', 30)),
         ]);
     }
 
     private function isSecret(string $key): bool
     {
-        return in_array($key, ['ai.api_key', 'waha.api_key', 'waha.webhook_secret'], true);
+        return in_array($key, ['ai.api_key', 'waha.api_key', 'waha.webhook_secret', 'baileys.api_key', 'baileys.webhook_secret'], true);
     }
 }

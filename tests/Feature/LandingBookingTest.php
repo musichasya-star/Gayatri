@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Branch;
 use App\Models\AvailabilitySlot;
+use App\Models\Booking;
+use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\LandingPageSetting;
 use App\Models\Service;
@@ -16,6 +17,28 @@ use Tests\TestCase;
 class LandingBookingTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_retry_of_an_already_confirmed_public_request_returns_the_same_booking(): void
+    {
+        [$branch, $service] = $this->seedBranchAndService();
+        $date = now()->addDay()->toDateString();
+        $slot = $this->slot($branch, $service, $date, '10:00:00');
+        $payload = [
+            'name' => 'Bunda Uji', 'whatsapp_number' => '081200001234', 'service_id' => $service->id,
+            'availability_slot_id' => $slot->id, 'booking_date' => $date, 'start_time' => '10:00',
+        ];
+
+        $this->post(route('landing.booking'), $payload)->assertSessionHasNoErrors()->assertRedirect(route('landing.booking-page'));
+        $booking = Booking::sole();
+        $booking->update(['status' => BookingStatus::CONFIRMED]);
+
+        $this->post(route('landing.booking'), $payload)->assertSessionHasNoErrors()->assertSessionHas('landing_booking_id', $booking->id);
+        $this->assertDatabaseCount('bookings', 1);
+        $this->assertSame(1, (int) $slot->fresh()->booked_count);
+        $this->post(route('landing.booking'), array_replace($payload, ['name' => 'Pemesan Kedua', 'whatsapp_number' => '081200005678']))
+            ->assertSessionHasErrors('booking');
+        $this->assertDatabaseCount('bookings', 1);
+    }
 
     public function test_landing_booking_saves_whatsapp_number_to_customer_database(): void
     {
@@ -91,11 +114,11 @@ class LandingBookingTest extends TestCase
         $this->assertDatabaseCount('customers', 1);
         $this->assertDatabaseHas('customers', [
             'id' => $existingCustomer->id,
-            'name' => 'Bunda Baru',
-            'phone' => '0812-3456-7890',
+            'name' => 'Bunda Lama',
+            'phone' => '081234567890',
             'whatsapp_number' => '6281234567890',
-            'email' => 'baru@example.test',
-            'baby_name' => 'Lia',
+            'email' => 'lama@example.test',
+            'baby_name' => 'Mia',
         ]);
 
         $this->assertDatabaseHas('bookings', [

@@ -14,6 +14,10 @@ final class ReminderStatus
 
     public const CANCELLED = 'cancelled';
 
+    public const SENDING = 'sending';
+
+    public const UNKNOWN = 'unknown';
+
     public static function all(): array
     {
         return [
@@ -22,6 +26,8 @@ final class ReminderStatus
             self::SENT,
             self::FAILED,
             self::CANCELLED,
+            self::SENDING,
+            self::UNKNOWN,
         ];
     }
 }

@@ -11,6 +11,6 @@
         @endif
     </div>
     @if (isset($actions))
-        <div>{{ $actions }}</div>
+        <div class="page-header-actions">{{ $actions }}</div>
     @endif
 </div>

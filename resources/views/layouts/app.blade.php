@@ -8,8 +8,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/gayatri-theme.css') }}">
+    @stack('styles')
 </head>
 <body class="gayatri-app">
+    <a class="skip-link" href="#main-content">Lewati ke isi halaman</a>
     <div class="sidebar-backdrop" data-sidebar-backdrop></div>
     <div class="app-shell">
         @include('partials.sidebar')
@@ -17,7 +19,7 @@
         <main class="main-panel">
             @include('partials.topbar')
 
-            <div class="page-content">
+            <div class="page-content" id="main-content" tabindex="-1">
                 @yield('content')
             </div>
         </main>

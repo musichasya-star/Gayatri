@@ -6,8 +6,12 @@ use App\Jobs\SendWhatsAppMessageJob;
 use App\Models\Conversation;
 use App\Models\Followup;
 use App\Models\User;
+use App\Services\AI\AiInteractionPolicy;
+use App\Services\WhatsApp\OutboundMessages;
 use App\Support\ConversationStatus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InboxService
 {
@@ -15,28 +19,25 @@ class InboxService
 
     public function sendReply(Conversation $conversation, string $message, User $actor, Request $request): void
     {
-        SendWhatsAppMessageJob::dispatch($conversation->id, $actor->id, 'admin', $message);
-
-        $oldValues = $conversation->getOriginal();
-        $conversation->update([
-            'assigned_user_id' => $actor->id,
-            'status' => ConversationStatus::HUMAN_HANDLED,
-            'ai_enabled' => false,
-        ]);
-
-        $this->auditLogService->log(
-            $actor,
-            'conversation.reply',
-            $conversation,
-            $request,
-            $oldValues,
-            $conversation->fresh()->toArray(),
-            'Mengirim balasan manual dari inbox.'
-        );
+        DB::transaction(function () use ($conversation, $message, $actor, $request) {
+            $current = Conversation::whereKey($conversation->id)->lockForUpdate()->firstOrFail();
+            InboxAccess::authorize($current, $actor);
+            $old = $current->only(['ai_enabled', 'status', 'assigned_user_id', 'ai_control_revision']);
+            $current->update(['assigned_user_id' => $actor->id, 'status' => ConversationStatus::HUMAN_HANDLED, 'ai_enabled' => false,
+                'ai_needs_attention' => false, 'ai_handoff_reason' => null]);
+            $this->clearAiContext($current);
+            $this->auditLogService->log($actor, 'conversation.reply', $current, $request, $old, $current->only(array_keys($old)), 'Balasan admin masuk antrean; isi pesan tidak disalin ke audit.');
+            SendWhatsAppMessageJob::dispatch($current->id, $actor->id, 'admin', $message)->afterCommit();
+        });
     }
 
     public function takeover(Conversation $conversation, User $actor, Request $request): void
     {
+        if (! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
+            $this->setAiControl($conversation, $actor, $request, false);
+
+            return;
+        }
         $oldValues = $conversation->getOriginal();
 
         if (! $conversation->ai_enabled && $conversation->assigned_user_id !== null) {
@@ -62,6 +63,49 @@ class InboxService
             $conversation->fresh()->toArray(),
             $conversation->ai_enabled ? 'Melepas takeover dan mengaktifkan AI kembali.' : 'Mengambil alih percakapan dari AI.'
         );
+    }
+
+    public function resume(Conversation $conversation, User $actor, Request $request): void
+    {
+        abort_unless($actor->hasRole(['owner', 'manager', 'admin', 'sales']), 403);
+        $this->setAiControl($conversation, $actor, $request, true);
+    }
+
+    private function setAiControl(Conversation $conversation, User $actor, Request $request, bool $resume): void
+    {
+        $data = $request->validate(['control_revision' => 'required|integer|min:0']);
+        DB::transaction(function () use ($conversation, $actor, $request, $data, $resume) {
+            $current = Conversation::whereKey($conversation->id)->lockForUpdate()->firstOrFail();
+            InboxAccess::authorize($current, $actor);
+            if ((int) $current->ai_control_revision !== (int) $data['control_revision']) {
+                throw ValidationException::withMessages(['control_revision' => 'Kendali percakapan berubah. Muat ulang Inbox sebelum melanjutkan.']);
+            }
+            if ($resume && (! in_array($current->customer?->status, ['lead', 'active'], true) || ! app(OutboundMessages::class)->chat($current))) {
+                throw ValidationException::withMessages(['control_revision' => 'AI belum dapat dilanjutkan: periksa status pelanggan dan tujuan WhatsApp.']);
+            }
+            if ($resume && ! app(AiInteractionPolicy::class)->snapshot()['enabled']) {
+                throw ValidationException::withMessages(['control_revision' => 'Balasan AI global sedang nonaktif. Minta owner/manager memeriksa pengaturan terlebih dahulu.']);
+            }
+            $old = $current->only(['ai_enabled', 'status', 'assigned_user_id', 'ai_control_revision']);
+            $changes = ['ai_enabled' => $resume, 'status' => $resume ? ConversationStatus::OPEN : ConversationStatus::HUMAN_HANDLED,
+                'assigned_user_id' => $resume ? null : $actor->id, 'ai_needs_attention' => false, 'ai_handoff_reason' => null, 'closed_at' => null];
+            if ($resume) {
+                $changes['ai_reply_after_message_id'] = (int) $current->messages()->where('direction', 'incoming')->max('id');
+                $changes['ai_resumed_at'] = now();
+                $changes['closed_at'] = null;
+            }
+            $current->update($changes);
+            $this->clearAiContext($current);
+            $this->auditLogService->log($actor, $resume ? 'conversation.ai.resume' : 'conversation.takeover', $current, $request, $old,
+                $current->only(array_merge(array_keys($old), ['ai_reply_after_message_id'])), $resume ? 'AI dilanjutkan untuk pesan baru. Backlog tidak diputar ulang.' : 'Percakapan diambil alih admin.');
+        });
+    }
+
+    private function clearAiContext(Conversation $conversation): void
+    {
+        DB::table('ai_conversation_contexts')->where('conversation_id', $conversation->id)->update(['domain' => null, 'menu' => null,
+            'lookup_payload' => null, 'lookup_expires_at' => null, 'clarification_count' => 0, 'expires_at' => now(),
+            'control_revision' => (int) $conversation->ai_control_revision, 'revision' => DB::raw('revision + 1'), 'updated_at' => now()]);
     }
 
     public function close(Conversation $conversation, User $actor, Request $request): void
@@ -137,6 +181,8 @@ class InboxService
 
     public function deleteHistory(Conversation $conversation, User $actor, Request $request): int
     {
+        abort_unless($actor->status === 'active' && $actor->hasRole(['owner', 'manager']), 403);
+        $request->validate(['confirmed' => ['required', 'accepted'], 'reason' => ['required', 'string', 'min:5', 'max:500']]);
         $oldValues = $conversation->getOriginal();
         $deletedCount = $conversation->messages()->count();
 
@@ -154,7 +200,7 @@ class InboxService
             $request,
             $oldValues,
             $conversation->fresh()->toArray(),
-            'Menghapus '.$deletedCount.' pesan dari history chat inbox.'
+            'Menghapus '.$deletedCount.' pesan dari history chat inbox. Alasan: '.$request->input('reason')
         );
 
         return $deletedCount;

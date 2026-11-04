@@ -41,6 +41,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (! app()->environment(['local', 'baileys-local', 'testing'])) {
+            throw new \RuntimeException('Seeder demo hanya untuk lingkungan lokal/pengujian.');
+        }
         $users = [
             ['name' => 'Owner Gayatri', 'email' => 'owner@gayatri.local', 'role' => UserRole::OWNER],
             ['name' => 'Manager Gayatri', 'email' => 'manager@gayatri.local', 'role' => UserRole::MANAGER],
@@ -229,7 +232,7 @@ class DatabaseSeeder extends Seeder
             ['code' => 'BABY10'],
             [
                 'title' => 'Promo Baby Spa 10%',
-                'type' => 'percentage',
+                'type' => 'percent',
                 'value' => 10,
                 'description' => 'Diskon 10% untuk booking baby spa minggu ini.',
                 'start_at' => now()->startOfDay(),

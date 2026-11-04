@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\AiPersona;
 use App\Models\AiExtractedData;
+use App\Models\AiPersona;
 use App\Models\AvailabilitySlot;
 use App\Models\Booking;
 use App\Models\Conversation;
@@ -22,10 +22,14 @@ use App\Support\CustomerStatus;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\Group;
+use Tests\Concerns\ExercisesLegacyAi;
 use Tests\TestCase;
 
+#[Group('legacy-ai')]
 class AiAutoReplyTest extends TestCase
 {
+    use ExercisesLegacyAi;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -274,9 +278,9 @@ class AiAutoReplyTest extends TestCase
         $conversation = Conversation::where('wa_chat_id', '628123450037@c.us')->firstOrFail();
         $reply = Message::where('conversation_id', $conversation->id)->where('direction', 'outgoing')->value('content');
 
-        $this->assertStringContainsString("1. Baby Spa Premium", $reply);
-        $this->assertStringContainsString("2. Mom Postnatal Massage", $reply);
-        $this->assertStringContainsString("3. Pijat Bayi Balita", $reply);
+        $this->assertStringContainsString('1. Baby Spa Premium', $reply);
+        $this->assertStringContainsString('2. Mom Postnatal Massage', $reply);
+        $this->assertStringContainsString('3. Pijat Bayi Balita', $reply);
         $this->assertStringContainsString('reservasi', strtolower($reply));
         $this->assertStringNotContainsString('Slot yang tersedia', $reply);
         $this->assertStringNotContainsString('09:00', $reply);
@@ -1035,7 +1039,7 @@ class AiAutoReplyTest extends TestCase
         $this->assertSame(0, Message::where('sender_type', 'ai')->count());
     }
 
-    public function test_new_incoming_message_reopens_closed_conversation_but_does_not_reply_if_ai_disabled(): void
+    public function test_new_incoming_preserves_closed_conversation_and_does_not_reply_if_ai_disabled(): void
     {
         $this->seedAiSetup();
 
@@ -1074,8 +1078,10 @@ class AiAutoReplyTest extends TestCase
             ])
             ->assertOk();
 
-        $this->assertSame(ConversationStatus::OPEN, $conversation->fresh()->status);
+        $this->assertSame(ConversationStatus::CLOSED, $conversation->fresh()->status);
         $this->assertFalse($conversation->fresh()->ai_enabled);
+        $this->assertNotNull($conversation->fresh()->closed_at);
+        $this->assertSame(1, $conversation->fresh()->unread_count);
         $this->assertSame(0, Message::where('sender_type', 'ai')->count());
     }
 
@@ -1228,6 +1234,7 @@ class AiAutoReplyTest extends TestCase
 
     public function test_partial_booking_data_is_merged_with_missing_service_reply_before_provider(): void
     {
+        $this->travelTo(Carbon::parse('2026-06-25 09:00:00', 'Asia/Jakarta'));
         config()->set('ai.provider', 'openrouter');
         config()->set('ai.api_key', 'test-key');
         config()->set('ai.model', 'test-model');

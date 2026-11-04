@@ -3,6 +3,7 @@
 @section('title', 'Follow-Up - Gayatri CRM')
 
 @section('content')
+@include('partials.admin-workbench-assets')
     <x-ui.page-header eyebrow="Follow-Up" title="Follow-Up Customer" description="Kelola task follow-up lead, customer lama, dan reminder sales/admin.">
         <x-slot name="actions">
             <a class="button button-primary" href="{{ route('admin.followups.create') }}"><i data-lucide="plus"></i> Buat Follow-Up</a>
@@ -15,9 +16,10 @@
     <div class="card" style="margin-bottom:1rem;">
         <div class="card-body">
             <form method="GET" class="grid grid-4">
-                <input class="input" name="q" placeholder="Cari customer, WA, judul, catatan" value="{{ request('q') }}">
-                <select class="input" name="status"><option value="">Semua status</option>@foreach(['open','sent','completed'] as $status)<option value="{{ $status }}" @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select>
-                <select class="input" name="priority"><option value="">Semua priority</option>@foreach(['normal','high'] as $priority)<option value="{{ $priority }}" @selected(request('priority')===$priority)>{{ $priority }}</option>@endforeach</select>
+                <input class="input" aria-label="Cari tindak lanjut" name="q" placeholder="Cari customer, WA, judul, catatan" value="{{ request('q') }}">
+                <select class="input" name="status" aria-label="Status tindak lanjut"><option value="">Semua status</option>@foreach(['open','sent','completed'] as $status)<option value="{{ $status }}" @selected(request('status')===$status)>{{ $status }}</option>@endforeach</select>
+                <select class="input" name="priority" aria-label="Prioritas tindak lanjut"><option value="">Semua priority</option>@foreach(['normal','high'] as $priority)<option value="{{ $priority }}" @selected(request('priority')===$priority)>{{ $priority }}</option>@endforeach</select>
+                <label><input type="checkbox" name="due" value="today" @checked(request('due')==='today')> Jatuh tempo hingga hari ini · tanpa demo</label>
                 <button class="button button-secondary" type="submit"><i data-lucide="search"></i> Filter</button>
             </form>
         </div>
