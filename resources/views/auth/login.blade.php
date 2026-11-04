@@ -67,12 +67,6 @@
                 <button class="button button-primary" type="submit" style="width: 100%;"><i data-lucide="log-in"></i> Masuk</button>
             </form>
 
-            @if(app()->environment(['local','baileys-local','testing']))
-            <div style="margin-top: 1rem; padding: .9rem; border: 1px solid rgba(216,195,165,.66); border-radius: 1rem; background: rgba(248,243,234,.72);">
-                <strong>Demo account</strong>
-                <p class="muted" style="margin: .3rem 0 0;">owner@gayatri.local / password</p>
-            </div>
-            @endif
         </section>
     </main>
 

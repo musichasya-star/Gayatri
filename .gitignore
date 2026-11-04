@@ -9,6 +9,7 @@
 !.env.example
 !.env.production.example
 /vps/
+/vps.txt
 /storage/app/baileys-local.sqlite*
 /storage/framework/testing-views*/
 /tmp/
