@@ -72,8 +72,8 @@ Urutan penyelesaian oleh pengelola usaha:
 
 ## Batas pengujian
 
-Validasi lokal lulus: **424 tes, 5.074 assertions**. Rinciannya: 28 tes kesiapan,
-hak akses, navigasi dan pengaturan (591 assertions); 393 tes transaksi dan
+Validasi lokal lulus: **424 tes, 5.075 assertions**. Rinciannya: 28 tes kesiapan,
+hak akses, navigasi dan pengaturan (592 assertions); 393 tes transaksi dan
 verifikasi AI (4.214 assertions); serta tiga perjalanan pelanggan baru yang
 meneruskan pesanan yang sama sampai penyelesaian (269 assertions). Lint PHP,
 parsing CSS, dan sintaks script restore lulus. Pengujian kesiapan serta tiga

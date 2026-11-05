@@ -78,8 +78,9 @@ class OperationalReadiness
 
         $products = RentalProduct::where('is_active', true)->whereRaw('UPPER(TRIM(name)) NOT LIKE ?', ['[DEMO]%'])->withCount(['units', 'units as ready_units_count' => fn ($q) => $q->where('status', 'ready')])->get();
         $rentalCounts = $products->countBy(fn ($product) => $product->catalogueReadiness());
+        $withoutUnits = $products->filter(fn ($product) => $product->units_count === 0)->count();
         $rental = app(RentalSettings::class)->get();
-        $add('rental', 'Katalog dan unit rental', ! $rental['enabled'] || ! ($rentalCounts['ready'] ?? 0) ? 'blocked' : (($rentalCounts['incomplete'] ?? 0) ? 'attention' : 'ready'), ($rentalCounts['ready'] ?? 0).' produk siap · '.($rentalCounts['incomplete'] ?? 0).' perlu tarif/deposit/jeda pembersihan · '.($rentalCounts['empty'] ?? 0).' tanpa unit · '.($rentalCounts['busy'] ?? 0).' sedang digunakan/perawatan. '.($rental['enabled'] ? 'Pemesanan rental aktif.' : 'Pemesanan rental belum aktif.'), 'admin.rentals.products.index');
+        $add('rental', 'Katalog dan unit rental', ! $rental['enabled'] || ! ($rentalCounts['ready'] ?? 0) ? 'blocked' : (($rentalCounts['incomplete'] ?? 0) ? 'attention' : 'ready'), ($rentalCounts['ready'] ?? 0).' produk siap · '.($rentalCounts['incomplete'] ?? 0)." perlu tarif/deposit/jeda pembersihan · $withoutUnits tanpa unit · ".($rentalCounts['busy'] ?? 0).' sedang digunakan/perawatan. '.($rental['enabled'] ? 'Pemesanan rental aktif.' : 'Pemesanan rental belum aktif.'), 'admin.rentals.products.index');
 
         $outlet = app(LaundrySettings::class)->get();
         $public = app(LaundryPublicSettings::class)->get();
@@ -139,7 +140,7 @@ class OperationalReadiness
         }
         foreach (RentalProduct::where('is_active', true)->withCount(['units', 'units as ready_units_count' => fn ($q) => $q->where('status', 'ready')])->get() as $product) {
             if ($product->catalogueReadiness() !== 'ready') {
-                yield ['Rental', $product->sku, $product->name, $product->catalogueMissing().($product->units_count ? '' : ' Belum ada unit fisik.'), route('admin.rentals.products.edit', $product)];
+                yield ['Rental', $product->sku, $product->name, $product->catalogueMissing().($product->units_count ? ($product->ready_units_count ? '' : ' Semua unit sedang digunakan/perawatan.') : ' Belum ada unit fisik.'), route('admin.rentals.products.edit', $product)];
             }
         }
         foreach (LaundryTariff::where('is_active', true)->get() as $tariff) {

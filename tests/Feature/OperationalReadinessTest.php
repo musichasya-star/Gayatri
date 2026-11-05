@@ -111,6 +111,7 @@ class OperationalReadinessTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
         Service::create(['name' => '=HYPERLINK("https://example.invalid")', 'catalog_code' => 'MISSING', 'service_group' => 'spa', 'booking_mode' => 'admin', 'is_active' => true, 'price' => 40000, 'duration_minutes' => null]);
         RentalProduct::create(['sku' => 'UNIT-TEST', 'name' => 'Stroller Uji', 'category' => 'Stroller', 'is_active' => true, 'daily_rate' => 10000, 'weekly_rate' => 50000, 'deposit' => null, 'turnaround_days' => 1]);
+        $this->assertStringContainsString('1 tanpa unit', app(OperationalReadiness::class)->report()['checks']['rental']['detail']);
         LaundryTariff::create(['code' => 'TARIF-UJI', 'name' => 'Laundry Uji', 'audience' => 'baby', 'unit' => 'kg', 'price' => 10000, 'is_active' => true, 'minimum_milli' => 0, 'increment_milli' => 0, 'duration_hours' => 0]);
         $content = $this->get(route('admin.readiness.export'))->assertOk()->streamedContent();
         $this->assertStringContainsString("'=HYPERLINK", $content);
