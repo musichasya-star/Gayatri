@@ -1,6 +1,7 @@
 @php
     $menu = [
         ['label' => 'Dashboard', 'icon' => 'layout-dashboard', 'route' => 'admin.dashboard'],
+        ['label' => 'Kesiapan Operasional', 'icon' => 'list-checks', 'route' => 'admin.readiness.index', 'active' => 'admin.readiness.*'],
         ['label' => 'Customers', 'icon' => 'users', 'route' => 'admin.customers.index'],
         ['label' => 'WhatsApp Inbox', 'icon' => 'message-circle', 'route' => 'admin.inbox'],
         ['label' => 'Bookings', 'icon' => 'calendar-check', 'route' => 'admin.bookings.index'],

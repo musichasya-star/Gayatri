@@ -1,0 +1,33 @@
+name: Operational Customer Journeys
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  operational-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, gd
+          tools: composer
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare synthetic environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Validate readiness and complete customer journeys
+        env:
+          APP_ENV: testing
+          VIEW_COMPILED_PATH: /tmp/gayatri-operations-testing-views
+        run: |
+          mkdir -p "$VIEW_COMPILED_PATH"
+          php vendor/bin/phpunit --do-not-cache-result --filter 'OperationalReadinessTest|OperationalCustomerJourneyTest|AdminNavigationConsistencyTest'

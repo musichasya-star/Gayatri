@@ -4,6 +4,7 @@
 @include('partials.admin-workbench-assets')
 <x-ui.page-header eyebrow="Dashboard" title="Ringkasan Bisnis {{ $rangeLabel }}" description="Mulai dari pekerjaan yang perlu ditangani, lalu tinjau hasil bisnis pada periode pilihan."><x-slot name="actions"><a class="button button-secondary" href="{{ route('admin.reports.index',['start_date'=>$startDate,'end_date'=>$endDate]) }}">Laporan & rincian</a></x-slot></x-ui.page-header>
 <section id="notifikasi-operasional" class="ops-record" aria-labelledby="work-title">
+@if(auth()->user()->hasRole(['owner','manager','admin']))<p class="wb-scope">Periksa kesiapan jadwal, katalog, WhatsApp, dan layanan pelanggan di <a href="{{ route('admin.readiness.index') }}">Kesiapan Operasional →</a></p>@endif
 <div class="wb-heading"><div><h2 id="work-title">Pekerjaan hari ini & antrean aktif</h2><p>Kondisi saat ini dari semua tanggal, terpisah dari periode laporan. Tugas modul mengecualikan data demo.</p></div><span class="wb-chip">{{ now()->format('d M Y H:i') }} WIB</span></div>
 <div class="wb-tasks">
 @foreach([

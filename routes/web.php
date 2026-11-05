@@ -31,6 +31,7 @@ use App\Http\Controllers\Admin\LaundryLogisticsController;
 use App\Http\Controllers\Admin\LaundryNotificationController;
 use App\Http\Controllers\Admin\LaundryPublicController;
 use App\Http\Controllers\Admin\LaundryReportController;
+use App\Http\Controllers\Admin\OperationalReadinessController;
 use App\Http\Controllers\Admin\PromoController;
 use App\Http\Controllers\Admin\ReminderController;
 use App\Http\Controllers\Admin\RentalCareController;
@@ -155,6 +156,8 @@ Route::prefix('admin')
         });
 
         Route::middleware('role:owner,manager,admin')->group(function () {
+            Route::get('/readiness', [OperationalReadinessController::class, 'index'])->name('readiness.index');
+            Route::get('/readiness/export', [OperationalReadinessController::class, 'export'])->name('readiness.export');
             Route::get('/retail', [RetailProductController::class, 'index'])->name('retail.index');
             Route::get('/retail/create', [RetailProductController::class, 'form'])->name('retail.create');
             Route::post('/retail', [RetailProductController::class, 'save'])->name('retail.store');
