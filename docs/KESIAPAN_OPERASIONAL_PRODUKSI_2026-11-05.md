@@ -26,6 +26,10 @@ tidak disimpan cache browser.
 - Baileys `gayatri-main`: WORKING. Pesan uji dikirim satu kali ke nomor yang
   secara eksplisit diberikan pengguna; catatan penerimaan gateway dan delivery
   tersedia di inbox/monitor. Tidak ada transaksi keuangan yang dibuat.
+- Pengguna membalas `menu` dari perangkat nyata. Pesan masuk diterima, worker
+  menyusun menu layanan, dan balasan AI tercatat delivered. Antrean dan failed
+  jobs kembali nol. Ini memvalidasi jalur perangkat → Baileys → webhook → worker
+  → balasan otomatis → perangkat, terpisah dari simulator.
 - Backup baru dibuat setelah konfigurasi AI dan sesi WhatsApp diperbarui.
 - Backup dipulihkan ke dua database MariaDB sementara dengan akun yang hanya
   memiliki akses ke database verifikasi tersebut. Tidak ada aplikasi, worker,
@@ -41,7 +45,7 @@ tidak disimpan cache browser.
 ## Bukti pengujian dan masa berlaku
 
 Ringkasan bukti disimpan privat pada disk `local`, `operations/verification.json`.
-Halaman hanya membaca empat jenis bukti yang diizinkan. Nilai bebas, exception,
+Halaman hanya membaca lima jenis bukti yang diizinkan. Nilai bebas, exception,
 API key, nomor pelanggan, dan rekaman transaksi tidak disalin ke tampilan.
 Hasil lebih dari 24 jam ditandai perlu diuji kembali; bukti provider juga
 ditandai lama jika provider, model, atau API key berubah. Hasil lama tetap
@@ -84,5 +88,6 @@ gateway/mail palsu, serta penyimpanan pengujian terpisah. Produksi diperiksa
 melalui akses halaman, kesehatan service, panggilan AI teknis, pengiriman ke
 nomor uji yang diizinkan, dan restore database terisolasi. Hasil transaksi
 terisolasi tidak berarti jadwal/stok/ketentuan usaha yang belum diisi sudah siap.
-Tes pesan masuk dari perangkat nyata memerlukan pemilik nomor membalas pesan
-uji; bedakan bukti tersebut dari simulasi penerimaan webhook.
+Rincian usaha yang belum final tetap ditandai perlu dilengkapi sesuai konfirmasi
+pengguna. Uji pesan masuk dari perangkat nyata selesai pada sesi pengujian ini;
+hasil simulator tetap dibedakan dari bukti perangkat tersebut.

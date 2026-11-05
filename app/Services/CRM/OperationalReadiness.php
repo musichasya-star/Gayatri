@@ -109,7 +109,7 @@ class OperationalReadiness
             }
             $stored = json_decode($disk->get(self::EVIDENCE_PATH), true, 16, JSON_THROW_ON_ERROR);
             $rows = [];
-            foreach (['ai_connection' => 'Koneksi provider AI', 'transactions' => 'Alur transaksi terisolasi', 'whatsapp_delivery' => 'Pengiriman WhatsApp ke nomor uji', 'backup_restore' => 'Pemulihan backup terisolasi'] as $key => $label) {
+            foreach (['ai_connection' => 'Koneksi provider AI', 'transactions' => 'Alur transaksi terisolasi', 'whatsapp_delivery' => 'Pengiriman WhatsApp ke nomor uji', 'whatsapp_conversation' => 'Pesan masuk dan balasan otomatis', 'backup_restore' => 'Pemulihan backup terisolasi'] as $key => $label) {
                 $row = $stored[$key] ?? null;
                 if (! is_array($row) || ! is_string($row['checked_at'] ?? null)) {
                     continue;
