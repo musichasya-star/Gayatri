@@ -19,7 +19,7 @@
                 <p class="muted">Klik peta atau geser pin ke titik kantor. Anda juga dapat memasukkan koordinat secara manual.</p>
                 <button type="button" class="button button-secondary" data-locate>Gunakan lokasi saya untuk kantor</button>
                 <div class="grid grid-2" style="margin:1rem 0;"><label>Latitude kantor<input class="input" type="number" step="any" min="-90" max="90" name="latitude" data-lat value="{{ old('latitude', $settings['latitude']) }}"></label><label>Longitude kantor<input class="input" type="number" step="any" min="-180" max="180" name="longitude" data-lng value="{{ old('longitude', $settings['longitude']) }}"></label></div>
-                <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg') }}" style="height:300px;border-radius:16px;z-index:0;" aria-label="Peta lokasi kantor"></div>
+                <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg').'?v='.config('gayatri_frontend.asset_version') }}" style="height:300px;border-radius:16px;z-index:0;" aria-label="Peta lokasi kantor"></div>
                 <p class="muted" data-location-status role="status"></p>
             </div>
         </div></details>

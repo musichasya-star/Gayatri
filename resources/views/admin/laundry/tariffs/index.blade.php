@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title','Katalog Tarif Laundry - Gayatri CRM')
-@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css').'?v='.config('gayatri_frontend.asset_version') }}">@endpush
 @section('content')
 <x-ui.page-header eyebrow="Laundry Ibu & Bayi" title="Katalog Tarif Laundry" description="Perjelas tarif kilogram dan satuan, aturan penagihan, serta kesiapan penerimaan."><x-slot name="actions"><a class="button button-primary" href="{{ route('admin.laundry.tariffs.create', \App\Support\AdminReviewContext::carry(request(),'laundry-tariffs')) }}">Tambah tarif</a></x-slot></x-ui.page-header>
 @include('admin.laundry.nav')

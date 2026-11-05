@@ -2,7 +2,7 @@
 @section('title', 'Pengaturan Fee Terapis - Gayatri')
 @section('content')
 @include('partials.admin-workbench-assets')
-<link rel="stylesheet" href="{{ asset('css/therapist-fees.css') }}">
+<link rel="stylesheet" href="{{ asset('css/therapist-fees.css').'?v='.config('gayatri_frontend.asset_version') }}">
 <x-ui.page-header eyebrow="Fee Terapis" title="Pengaturan Persentase Fee" description="Atur persentase default dan persentase khusus per terapis untuk pijat & spa maupun laktasi & konsultasi ASI." />
 @include('admin.therapist-fees.nav')
 @if(session('status'))<div class="fee-alert" role="status">{{ session('status') }}</div>@endif

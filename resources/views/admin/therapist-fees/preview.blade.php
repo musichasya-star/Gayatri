@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Pratinjau Fee Histori - Gayatri')
 @section('content')
-<link rel="stylesheet" href="{{ asset('css/therapist-fees.css') }}">
+<link rel="stylesheet" href="{{ asset('css/therapist-fees.css').'?v='.config('gayatri_frontend.asset_version') }}">
 <x-ui.page-header eyebrow="Fee Terapis" title="Pratinjau Fee Histori" description="Periksa data sebelum mencatat fee. Pratinjau ini belum mengubah laporan dan berlaku 15 menit." />
 <p><a class="button button-secondary" href="{{ route('admin.therapist-fees.index', $filters) }}">Kembali ke Laporan</a></p>
 <div class="fee-alert">Dasar fee: nilai treatment + tambahan − diskon, tanpa ongkos perjalanan. Persentase memakai pengaturan saat pratinjau. Harga histori tanpa snapshot memakai katalog saat ini dan harus diperiksa admin. Fee dibulatkan ke rupiah terdekat per booking.</div>

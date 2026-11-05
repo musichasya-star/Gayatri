@@ -1,14 +1,14 @@
 .transaction-next {
     padding: 20px;
     margin-block: 16px 24px;
-    border: 1px solid #dec9ae;
+    border: 1px solid var(--g-pink-line);
     border-radius: 16px;
-    background: #f6eee3;
-    color: #4a281b;
+    background: var(--g-ocean-soft);
+    color: var(--g-ocean-deep);
     overflow-wrap: anywhere;
 }
 .transaction-kicker {
-    color: #765027;
+    color: var(--g-ocean);
     font-size: .72rem;
     font-weight: 700;
     letter-spacing: .11em;
@@ -25,17 +25,17 @@
     padding: 16px 0;
     margin: 0;
     border: 0;
-    border-bottom: 1px solid #e8d8c5;
+    border-bottom: 1px solid var(--g-line);
 }
-.transaction-fields legend { font-weight: 700; color: #4a281b; padding: 0 0 4px; }
+.transaction-fields legend { font-weight: 700; color: var(--g-ocean-deep); padding: 0 0 4px; }
 .transaction-fields label { min-width: 0; }
 .transaction-wide { grid-column: 1 / -1; }
-.transaction-recap { padding: 16px; border-radius: 14px; background: #f6eee3; margin: 0; }
-.transaction-recap div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid #e5d5c1; }
+.transaction-recap { padding: 16px; border-radius: 14px; background: var(--g-ocean-soft); margin: 0; }
+.transaction-recap div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--g-line); }
 .transaction-recap div:last-child { border: 0; }
 .transaction-recap dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-.transaction-recap dt { color: #665548; }
-.transaction-progress { font-size: .85rem; color: #665548; }
+.transaction-recap dt { color: var(--g-muted); }
+.transaction-progress { font-size: .85rem; color: var(--g-muted); }
 [data-transaction-sending] { opacity: .65; cursor: wait; }
 .gp-booking .transaction-fields > label { font-size: .85rem; }
 .gp-booking [data-home-service] { min-width: 0; }

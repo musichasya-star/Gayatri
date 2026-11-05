@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'asset_version' => 'pink-ocean-20261105',
     'hero_video' => [
         'desktop' => '/videos/landing/spa-desktop-v2.mp4',
         'mobile' => '/videos/landing/spa-mobile-v1.mp4',

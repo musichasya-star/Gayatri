@@ -51,7 +51,7 @@
 .inbox-refresh p { margin:0; color:var(--text-muted); }
 .inbox-mobile-back { display:none; }
 .inbox-profile { width:min(40rem,calc(100% - 2rem)); max-height:85dvh; padding:1.25rem; border:1px solid var(--soft-taupe); border-radius:1rem; background:var(--ivory); color:var(--text-dark); }
-.inbox-profile::backdrop { background:rgba(47,36,29,.5); }
+.inbox-profile::backdrop { background:rgba(var(--g-ink-rgb), .5); }
 .inbox-profile h2 { font-size:1.2rem; margin:0; }
 .inbox-profile .soft-list-item { gap:1rem; overflow-wrap:anywhere; }
 .inbox-profile form { display:grid; gap:.6rem; margin-top:1rem; }

@@ -73,6 +73,8 @@ class RentalProduct extends Model
 
     public function imageUrl(): string
     {
-        return $this->image_path ? Storage::disk('public')->url($this->image_path) : asset('images/rental-placeholder.svg');
+        return $this->image_path
+            ? Storage::disk('public')->url($this->image_path)
+            : asset('images/rental-placeholder.svg').'?v='.config('gayatri_frontend.asset_version');
     }
 }

@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ $document->number }} — {{ \App\Models\LaundryDocument::TYPES[$document->type] }}</title><link rel="stylesheet" href="{{ asset('css/laundry.css') }}"></head>
+<html lang="id"><head>
+@include('partials.theme')<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ $document->number }} — {{ \App\Models\LaundryDocument::TYPES[$document->type] }}</title><link rel="stylesheet" href="{{ asset('css/laundry.css').'?v='.config('gayatri_frontend.asset_version') }}"></head>
 <body class="laundry-receipt"><main>
     <div class="laundry-actions laundry-no-print"><button type="button" data-laundry-print>Cetak / Simpan PDF</button><a href="{{ $backUrl ?? route('admin.laundry.orders.show', $order) }}">Kembali ke Pesanan</a></div>
     <header><p class="laundry-eyebrow">{{ strtoupper(\App\Models\LaundryDocument::TYPES[$document->type]) }}</p>

@@ -95,7 +95,7 @@
         </tbody></table><div style="margin-top:1rem;">{{ $history->links() }}</div>
     </div></section>
     <style>
-        .birthday-label{display:block;margin-bottom:.4rem;font-weight:700;color:#705b4d}
+        .birthday-label{display:block;margin-bottom:.4rem;font-weight:700;color:var(--g-muted)}
         .birthday-check{display:flex;gap:.6rem;align-items:center;margin-bottom:.75rem}
         .birthday-preview{margin-top:1rem;padding:1.25rem;background:#f2f6ed;border:1px solid #c8d7b8;border-radius:1rem}
     </style>

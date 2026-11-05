@@ -130,9 +130,9 @@
         </div>
     </template>
     <style>
-        .reply-field-label{display:block;margin-bottom:.4rem;font-weight:700;color:#705b4d}
-        .reply-rule,.reply-variable-help{padding:1rem;border:1px solid rgba(157,127,102,.2);border-radius:1rem;background:rgba(157,127,102,.035);min-width:0}
-        .reply-variable-help code{display:inline-block;margin:.2rem;padding:.25rem .4rem;background:#f1e8d7;border-radius:.3rem;font-size:.85rem}
+        .reply-field-label{display:block;margin-bottom:.4rem;font-weight:700;color:var(--g-muted)}
+        .reply-rule,.reply-variable-help{padding:1rem;border:1px solid rgba(var(--g-ocean-rgb), .2);border-radius:1rem;background:rgba(var(--g-ocean-rgb), .035);min-width:0}
+        .reply-variable-help code{display:inline-block;margin:.2rem;padding:.25rem .4rem;background:var(--g-ocean-soft);border-radius:.3rem;font-size:.85rem}
         .reply-preview-result{margin-top:1rem;padding:1.25rem;background:#f2f6ed;border:1px solid #c8d7b8;border-radius:1rem}
     </style>
     <script>

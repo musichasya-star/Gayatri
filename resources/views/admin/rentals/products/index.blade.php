@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title','Katalog Rental - Gayatri CRM')
-@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css').'?v='.config('gayatri_frontend.asset_version') }}">@endpush
 @section('content')
 <x-ui.page-header eyebrow="Rental Perlengkapan" title="Katalog Rental" description="Bandingkan tarif per periode, deposit, dan status unit sebelum menerima pesanan."><x-slot name="actions"><a class="button button-secondary" href="{{ route('rental.index') }}">Katalog pelanggan</a><a class="button button-primary" href="{{ route('admin.rentals.products.create', \App\Support\AdminReviewContext::carry(request(),'rental-products')) }}">Tambah alat</a></x-slot></x-ui.page-header>
 @include('admin.rentals.partials.navigation')

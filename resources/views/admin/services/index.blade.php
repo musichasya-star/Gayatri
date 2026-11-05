@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title', ($filters['service_group'] ? \App\Support\ServiceGroup::LABELS[$filters['service_group']] : 'Seluruh Layanan').' - Gayatri CRM')
-@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css').'?v='.config('gayatri_frontend.asset_version') }}">@endpush
 @section('content')
 <x-ui.page-header eyebrow="Katalog Layanan" :title="$filters['service_group'] ? \App\Support\ServiceGroup::LABELS[$filters['service_group']] : 'Seluruh Layanan'" description="Kelola keluarga layanan, variasi harga, kesiapan pemesanan, dan publikasi.">
     <x-slot name="actions"><a class="button button-secondary" href="{{ route('catalogue.index',['group'=>$filters['service_group']]) }}">Katalog pelanggan</a><a class="button button-primary" href="{{ route('admin.services.create',array_merge(['service_group'=>$filters['service_group']], \App\Support\AdminReviewContext::carry(request(),'services'))) }}">Tambah layanan</a></x-slot>

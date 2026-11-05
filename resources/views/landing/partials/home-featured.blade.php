@@ -6,7 +6,7 @@
         @php($online = !$choice->requiresManualBooking() && $choice->duration_minutes>0 && $choice->price>=0)
         @php($art = config('gayatri_frontend.featured_illustrations.'.$choice->catalog_code, $choice->service_group === 'lactation' ? 'mother-baby' : 'care'))
         <article class="gp-featured-card gp-featured-illustrated" data-service-tone="{{ $choice->service_group === 'lactation' ? 'lactation' : 'spa' }}">
-            <img class="gp-featured-art" src="{{ asset('images/landing/illustrations/'.$art.'.svg') }}" width="180" height="180" alt="" aria-hidden="true" loading="lazy" decoding="async">
+            <img class="gp-featured-art" src="{{ asset('images/landing/illustrations/'.$art.'.svg').'?v='.config('gayatri_frontend.asset_version') }}" width="180" height="180" alt="" aria-hidden="true" loading="lazy" decoding="async">
             <div class="gp-featured-top"><span class="gp-tag">{{ $choice->groupLabel() }}</span></div>
             <h3>{{ $choice->familyName() }}</h3>
             <div class="gp-featured-details">

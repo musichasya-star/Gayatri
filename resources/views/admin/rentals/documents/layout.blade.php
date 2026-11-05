@@ -1,11 +1,12 @@
 <!doctype html>
 <html lang="id">
 <head>
+@include('partials.theme')
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <title>@yield('title', 'Dokumen Rental')</title>
-    <link rel="stylesheet" href="{{ asset('css/rental-documents.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/rental-documents.css').'?v='.config('gayatri_frontend.asset_version') }}">
 </head>
 <body class="rd-page">
     <a class="rd-skip rd-no-print" href="#document-content">Lewati ke isi dokumen</a>

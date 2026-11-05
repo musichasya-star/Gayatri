@@ -9,6 +9,6 @@
     @include('admin.landing.readiness')
     @php($width = ['desktop' => '100%', 'tablet' => '820px', 'mobile' => '390px'][$device])
     <div style="display:flex;justify-content:center;">
-        <iframe title="Landing preview" src="{{ route('landing.show', ['preview' => 1]) }}" style="width:{{ $width }};max-width:100%;height:80vh;border:1px solid rgba(216,195,165,.8);border-radius:1.5rem;box-shadow:var(--shadow-soft);background:#fff;"></iframe>
+        <iframe title="Landing preview" src="{{ route('landing.show', ['preview' => 1]) }}" style="width:{{ $width }};max-width:100%;height:80vh;border:1px solid rgba(var(--g-line-rgb), .8);border-radius:1.5rem;box-shadow:var(--shadow-soft);background:#fff;"></iframe>
     </div>
 @endsection

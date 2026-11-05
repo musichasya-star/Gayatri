@@ -25,7 +25,7 @@
     <div data-location-picker data-center-lat="{{ $settings['latitude'] }}" data-center-lng="{{ $settings['longitude'] }}">
         <button class="button button-secondary" type="button" data-locate>Gunakan lokasi saya</button>
         <div class="rental-grid"><label>Latitude tujuan<input class="input" data-lat type="number" step="any" min="-90" max="90" name="latitude" value="{{ old('latitude') }}"></label><label>Longitude tujuan<input class="input" data-lng type="number" step="any" min="-180" max="180" name="longitude" value="{{ old('longitude') }}"></label></div>
-        <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg') }}" style="height:280px;z-index:0;border-radius:16px;" aria-label="Peta tujuan antar-jemput rental"></div><p class="muted" data-location-status role="status"></p>
+        <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg').'?v='.config('gayatri_frontend.asset_version') }}" style="height:280px;z-index:0;border-radius:16px;" aria-label="Peta tujuan antar-jemput rental"></div><p class="muted" data-location-status role="status"></p>
     </div>
     <p class="muted rental-small">Klik peta, geser pin, atau isi koordinat manual. Koordinat akan dikirim ke penyedia rute ketika menghitung ongkos; alamat lengkap tersimpan di Gayatri.</p>
 </div>

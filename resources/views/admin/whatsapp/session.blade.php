@@ -63,7 +63,7 @@
             <div class="card-body">
                 <h2 class="section-title">QR Code</h2>
                 @if (($qr['data'] ?? null) && ($qr['mimetype'] ?? null))
-                    <img src="data:{{ $qr['mimetype'] }};base64,{{ $qr['data'] }}" alt="QR {{ $gatewayLabel }}" style="width:280px;max-width:100%;border-radius:1rem;border:1px solid rgba(157,127,102,.16);">
+                    <img src="data:{{ $qr['mimetype'] }};base64,{{ $qr['data'] }}" alt="QR {{ $gatewayLabel }}" style="width:280px;max-width:100%;border-radius:1rem;border:1px solid rgba(var(--g-ocean-rgb), .16);">
                     <p class="muted" style="margin-top: .85rem;">Scan QR ini dari WhatsApp di perangkat utama jika status masih `SCAN_QR_CODE`.</p>
                 @else
                     <x-ui.empty-state

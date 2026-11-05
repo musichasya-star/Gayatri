@@ -2,7 +2,7 @@
 @section('title', 'Laporan Fee Terapis - Gayatri')
 @section('content')
 @include('partials.admin-workbench-assets')
-<link rel="stylesheet" href="{{ asset('css/therapist-fees.css') }}">
+<link rel="stylesheet" href="{{ asset('css/therapist-fees.css').'?v='.config('gayatri_frontend.asset_version') }}">
 <x-ui.page-header eyebrow="Fee Terapis" title="Laporan Fee Terapis" description="Rekap hak fee berdasarkan tanggal pelayanan. Nilai netto treatment termasuk tambahan layanan, setelah diskon, tanpa ongkos perjalanan." />
 @include('admin.therapist-fees.nav')
 @if(session('status'))<div class="fee-alert" role="status">{{ session('status') }}</div>@endif

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title', ($service->exists?'Edit Variasi':'Tambah Layanan').' - Gayatri CRM')
-@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css').'?v='.config('gayatri_frontend.asset_version') }}">@endpush
 @section('content')
 <x-ui.page-header :eyebrow="$service->groupLabel()" title="{{ $service->exists?'Edit variasi layanan':'Tambah layanan / variasi' }}" description="Kelola informasi, harga, tambahan, dan publikasi secara terpisah.">
 <x-slot name="actions"><a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'services',['service_group'=>$service->service_group]) }}">Kembali ke katalog</a></x-slot></x-ui.page-header>

@@ -1,4 +1,4 @@
-@once<link rel="stylesheet" href="{{ asset('css/rental-documents.css') }}">@endonce
+@once<link rel="stylesheet" href="{{ asset('css/rental-documents.css').'?v='.config('gayatri_frontend.asset_version') }}">@endonce
 @php
     // Always paginate independently of any eager-loaded documents relation.
     $documentHistory = \App\Models\RentalDocument::where('rental_order_id', $order->id)->orderByDesc('id')->paginate(8, ['*'], 'documents_page')->withQueryString();

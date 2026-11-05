@@ -1,7 +1,7 @@
 <x-public.page :title="$bookingContent['meta_title']" :description="$bookingContent['meta_description']" page-class="gp-booking">
 <x-slot:head>
-    <link rel="stylesheet" href="{{ asset('css/gayatri-booking.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/gayatri-transactions.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/gayatri-booking.css').'?v='.config('gayatri_frontend.asset_version') }}">
+    <link rel="stylesheet" href="{{ asset('css/gayatri-transactions.css').'?v='.config('gayatri_frontend.asset_version') }}">
 </x-slot:head>
 <x-slot:scripts><script src="{{ asset('js/public-transactions.js') }}" defer></script></x-slot:scripts>
 <nav class="gp-breadcrumb" aria-label="Jejak halaman"><a href="{{ route('landing.show') }}">Beranda</a><span aria-hidden="true">/</span><a data-return-catalogue href="{{ \App\Services\Web\PublicCatalogue::backUrl(old('return_to',request('return_to')),route('catalogue.index',['group'=>$serviceGroup])) }}">Kembali ke katalog</a><span aria-hidden="true">/</span><span>{{ \App\Support\ServiceGroup::LABELS[$serviceGroup] }}</span></nav>

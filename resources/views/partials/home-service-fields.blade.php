@@ -27,7 +27,7 @@
             <button type="button" class="button button-secondary btn btn-soft" data-locate>Gunakan lokasi saya</button>
             <p class="muted">Lokasi saat ini hanya diambil setelah Anda mengizinkan. Klik peta atau geser pin jika alamat kunjungan berbeda. Koordinat juga bisa diisi manual.</p>
             <div class="grid grid-2"><label class="home-label">Latitude tujuan<input class="input" type="number" step="any" min="-90" max="90" name="visit_latitude" data-lat value="{{ old('visit_latitude', $booking?->visit_latitude) }}"></label><label class="home-label">Longitude tujuan<input class="input" type="number" step="any" min="-180" max="180" name="visit_longitude" data-lng value="{{ old('visit_longitude', $booking?->visit_longitude) }}"></label></div>
-            <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg') }}" style="height:290px;border-radius:16px;z-index:0;margin-top:1rem;" aria-label="Peta tujuan kunjungan"></div>
+            <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg').'?v='.config('gayatri_frontend.asset_version') }}" style="height:290px;border-radius:16px;z-index:0;margin-top:1rem;" aria-label="Peta tujuan kunjungan"></div>
             <p data-location-status role="status" class="muted"></p>
         </div>
         <p class="muted">Saat menghitung ongkos, koordinat tujuan dikirim ke penyedia rute. Alamat lengkap tetap disimpan di Gayatri.</p>

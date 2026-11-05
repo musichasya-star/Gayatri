@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="id">
 <head>
+@include('partials.theme')
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login - Gayatri CRM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ asset('css/gayatri-theme.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/gayatri-theme.css').'?v='.config('gayatri_frontend.asset_version') }}">
 </head>
 <body class="gayatri-app">
     <main class="login-shell">
@@ -21,9 +22,9 @@
             </div>
 
             <div style="position: relative; z-index: 1; max-width: 40rem;">
-                <p class="eyebrow" style="color: var(--soft-gold);">Brown Gold Classic Modern</p>
+                <p class="eyebrow" style="color: var(--soft-gold);">Gayatri · Mom &amp; Baby Care</p>
                 <h1 class="page-title" style="color: var(--ivory);">Dashboard premium untuk Mom & Baby SPA.</h1>
-                <p style="color: rgba(255,253,247,.76); line-height: 1.8; max-width: 34rem;">Kelola WhatsApp, customer, booking, reminder, follow-up, campaign, dan AI assistant Gayatri dalam pengalaman yang hangat, lembut, dan profesional.</p>
+                <p style="color: rgba(var(--g-surface-rgb), .76); line-height: 1.8; max-width: 34rem;">Kelola WhatsApp, customer, booking, reminder, follow-up, campaign, dan AI assistant Gayatri dalam pengalaman yang hangat, lembut, dan profesional.</p>
             </div>
 
             <ul class="login-feature-list">

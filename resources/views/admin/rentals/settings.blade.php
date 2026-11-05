@@ -14,7 +14,7 @@
             <label>Alamat pengambilan<textarea class="input" name="office_address" maxlength="2000">{{ old('office_address', $settings['office_address']) }}</textarea></label>
             <div class="rental-wide" data-location-picker><button type="button" class="button button-secondary" data-locate>Gunakan lokasi saya untuk kantor</button>
                 <div class="rental-grid"><label>Latitude kantor rental<input class="input" data-lat name="latitude" type="number" step="any" min="-90" max="90" value="{{ old('latitude', $settings['latitude']) }}"></label><label>Longitude kantor rental<input class="input" data-lng name="longitude" type="number" step="any" min="-180" max="180" value="{{ old('longitude', $settings['longitude']) }}"></label></div>
-                <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg') }}" style="height:300px;z-index:0;border-radius:16px;" aria-label="Peta kantor rental"></div><p class="muted" data-location-status role="status"></p>
+                <div data-location-map data-error-tile="{{ asset('images/map-unavailable.svg').'?v='.config('gayatri_frontend.asset_version') }}" style="height:300px;z-index:0;border-radius:16px;" aria-label="Peta kantor rental"></div><p class="muted" data-location-status role="status"></p>
             </div>
         </div></div>
         <div class="card" style="margin-top:1rem;"><div class="card-body rental-grid">

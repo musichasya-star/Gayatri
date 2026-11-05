@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Invoice & Kuitansi Rental')
 @push('styles')
-<link rel="stylesheet" href="{{ asset('css/rental-documents.css') }}">
+<link rel="stylesheet" href="{{ asset('css/rental-documents.css').'?v='.config('gayatri_frontend.asset_version') }}">
 @endpush
 @section('content')
     <x-ui.page-header eyebrow="Arsip Transaksi Sewa" title="Invoice & Kuitansi" description="Data sesuai keadaan transaksi saat dokumen diterbitkan."><x-slot name="actions"><span class="badge badge-gold">{{ number_format($documents->total(), 0, ',', '.') }} dokumen terbit</span></x-slot></x-ui.page-header>

@@ -1,0 +1,39 @@
+/* Shared Pink & Ocean palette. Used by public pages, admin, portals and documents. */
+:root {
+    color-scheme: light;
+    --g-ocean: #0b718b;
+    --g-ocean-rgb: 11, 113, 139;
+    --g-ocean-strong: #09566e;
+    --g-ocean-strong-rgb: 9, 86, 110;
+    --g-ocean-deep: #153e56;
+    --g-ocean-deep-rgb: 21, 62, 86;
+    --g-ocean-night: #102f44;
+    --g-ocean-night-rgb: 16, 47, 68;
+    --g-ocean-soft: #e8f5fa;
+    --g-ocean-soft-rgb: 232, 245, 250;
+    --g-pink: #b83271;
+    --g-pink-rgb: 184, 50, 113;
+    --g-pink-strong: #9b245b;
+    --g-pink-strong-rgb: 155, 36, 91;
+    --g-pink-light: #f3b4d0;
+    --g-pink-light-rgb: 243, 180, 208;
+    --g-pink-line: #efbfd5;
+    --g-pink-line-rgb: 239, 191, 213;
+    --g-pink-soft: #fce5f0;
+    --g-pink-soft-rgb: 252, 229, 240;
+    --g-pink-mist: #fff6fa;
+    --g-pink-mist-rgb: 255, 246, 250;
+    --g-surface: #ffffff;
+    --g-surface-rgb: 255, 255, 255;
+    --g-canvas: #f5f9fc;
+    --g-canvas-rgb: 245, 249, 252;
+    --g-line: #d5e5ed;
+    --g-line-rgb: 213, 229, 237;
+    --g-control-line: #7895a6;
+    --g-ink: #203d50;
+    --g-ink-rgb: 32, 61, 80;
+    --g-muted: #526b7b;
+    --g-muted-rgb: 82, 107, 123;
+}
+::selection { background: var(--g-pink-soft); color: var(--g-ocean-deep); }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--g-ocean); }

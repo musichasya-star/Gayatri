@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="id">
 <head>
+@include('partials.theme')
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Gayatri CRM WhatsApp AI')</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ asset('css/gayatri-theme.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/gayatri-theme.css').'?v='.config('gayatri_frontend.asset_version') }}">
     @stack('styles')
 </head>
 <body class="gayatri-app">

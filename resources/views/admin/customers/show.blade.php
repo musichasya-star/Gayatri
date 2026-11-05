@@ -54,7 +54,7 @@
             <div class="card-body">
 
                 @forelse ($customer->conversations as $conversation)
-                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(157,127,102,.16);">
+                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(var(--g-ocean-rgb), .16);">
                         <strong>{{ $conversation->wa_chat_id }}</strong>
                         <p class="muted">Status: {{ ucfirst(str_replace('_', ' ', $conversation->status)) }} | Assigned: {{ $conversation->assignedUser?->name ?: '-' }}</p>
                     </div>
@@ -68,7 +68,7 @@
             <div class="card-body">
 
                 @forelse ($customer->bookings as $booking)
-                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(157,127,102,.16);">
+                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(var(--g-ocean-rgb), .16);">
                         <strong>{{ $booking->booking_code }}</strong>
                         <p class="muted">{{ $booking->service?->name ?: '-' }} | {{ $booking->booking_date?->format('d M Y') }} {{ $booking->start_time }}</p>
                     </div>
@@ -82,7 +82,7 @@
             <div class="card-body">
 
                 @forelse ($customer->followups as $followup)
-                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(157,127,102,.16);">
+                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(var(--g-ocean-rgb), .16);">
                         <strong>{{ $followup->title }}</strong>
                         <p class="muted">{{ ucfirst($followup->priority) }} | {{ $followup->assignedUser?->name ?: '-' }}</p>
                     </div>
@@ -96,7 +96,7 @@
             <div class="card-body">
 
                 @forelse ($customer->campaignRecipients as $recipient)
-                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(157,127,102,.16);">
+                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(var(--g-ocean-rgb), .16);">
                         <strong>{{ $recipient->campaign?->name ?: '-' }}</strong>
                         <p class="muted">Status: {{ ucfirst($recipient->status) }}</p>
                     </div>
@@ -110,7 +110,7 @@
             <div class="card-body">
 
                 @forelse ($customer->feedback as $feedback)
-                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(157,127,102,.16);">
+                    <div style="padding: .85rem 0; border-bottom: 1px solid rgba(var(--g-ocean-rgb), .16);">
                         <strong>Rating {{ $feedback->rating ?: '-' }}/5</strong>
                         <p class="muted">{{ $feedback->message ?: 'Tanpa catatan feedback.' }}</p>
                     </div>

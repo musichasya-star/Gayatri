@@ -1,8 +1,8 @@
-.home-label{display:block;font-weight:700;margin:.65rem 0}.home-label .input{display:block;margin-top:.4rem}.home-summary{margin:1rem 0;padding:1rem;border:1px solid #d8c3a5;border-radius:16px;background:#f8f3ea;color:#3d2415;line-height:1.7;white-space:pre-line}.home-service-fields [hidden]{display:none!important}[data-location-picker] .leaflet-container{font-family:inherit}[data-location-map]{isolation:isolate}.home-service-fields .muted{font-weight:400;color:#7b6a5a;line-height:1.6}
+.home-label{display:block;font-weight:700;margin:.65rem 0}.home-label .input{display:block;margin-top:.4rem}.home-summary{margin:1rem 0;padding:1rem;border:1px solid var(--g-line);border-radius:16px;background:var(--g-canvas);color:var(--g-ocean-night);line-height:1.7;white-space:pre-line}.home-service-fields [hidden]{display:none!important}[data-location-picker] .leaflet-container{font-family:inherit}[data-location-map]{isolation:isolate}.home-service-fields .muted{font-weight:400;color:var(--g-muted);line-height:1.6}
 @media(max-width:520px){.summary-row>span,.summary-row>strong{display:block}.summary-row>strong{margin-top:.35rem;overflow-wrap:anywhere}}
-.home-map-status{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0;padding:12px 14px;background:#fff5df;border:1px solid #e5c98e;border-radius:12px;color:#654820;font-size:13px;line-height:1.6}
+.home-map-status{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0;padding:12px 14px;background:var(--g-ocean-soft);border:1px solid var(--g-pink-light);border-radius:12px;color:var(--g-ocean-deep);font-size:13px;line-height:1.6}
 .home-map-status[hidden]{display:none}
 .home-map-status>span{flex:1 1 240px}
-.home-map-status>button{border:1px solid #aa793d;border-radius:8px;padding:10px 14px;min-height:44px;background:#fffcf5;color:#674318;font:inherit;cursor:pointer}
-.home-map-status>button:focus-visible{outline:3px solid #94602b;outline-offset:3px}
+.home-map-status>button{border:1px solid var(--g-ocean);border-radius:8px;padding:10px 14px;min-height:44px;background:var(--g-surface);color:var(--g-ocean-deep);font:inherit;cursor:pointer}
+.home-map-status>button:focus-visible{outline:3px solid var(--g-pink);outline-offset:3px}
 .home-map-status>button:disabled{cursor:wait;opacity:.6}

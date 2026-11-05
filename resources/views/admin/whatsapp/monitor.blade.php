@@ -2,7 +2,7 @@
 @section('title', 'Monitoring WhatsApp - Gayatri')
 @section('content')
 @include('partials.admin-workbench-assets')
-<link rel="stylesheet" href="{{ asset('css/whatsapp-monitor.css') }}">
+<link rel="stylesheet" href="{{ asset('css/whatsapp-monitor.css').'?v='.config('gayatri_frontend.asset_version') }}">
 <div class="whatsapp-monitor">
     <x-ui.page-header eyebrow="Operasional WhatsApp" title="Monitoring WhatsApp" description="Pantau koneksi, antrean pekerjaan, dan hasil pengiriman dari seluruh modul.">
         <x-slot name="actions">

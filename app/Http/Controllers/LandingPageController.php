@@ -54,7 +54,7 @@ class LandingPageController extends Controller
             $content = array_replace($content, [
                 'meta_title' => 'Laktasi & Konsultasi ASI - Gayatri',
                 'meta_description' => 'Buat janji layanan laktasi dan konsultasi ASI Gayatri. Pilih layanan serta jadwal yang tersedia.',
-                'eyebrow' => 'GAYATRI Â· LAKTASI & KONSULTASI ASI',
+                'eyebrow' => 'GAYATRI · LAKTASI & KONSULTASI ASI',
                 'headline' => 'Pendampingan menyusui untuk Bunda.',
                 'lead' => 'Pilih layanan laktasi atau konsultasi ASI pada halaman khusus ini. Tim Gayatri akan mengonfirmasi jadwal dan kebutuhan kunjungan melalui WhatsApp.',
                 'hero_badge_1_title' => 'Layanan khusus', 'hero_badge_1_text' => 'Pilihan laktasi dan konsultasi ASI.',

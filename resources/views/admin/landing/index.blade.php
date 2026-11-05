@@ -194,7 +194,7 @@
                         <h4>Items</h4>
                         <div data-items>
                             @forelse($items as $index => $item)
-                                <div class="card" style="margin-bottom:.75rem;background:rgba(255,253,247,.72);"><div class="card-body grid grid-4" style="padding:1rem;">
+                                <div class="card" style="margin-bottom:.75rem;background:rgba(var(--g-surface-rgb), .72);"><div class="card-body grid grid-4" style="padding:1rem;">
                                     @foreach((array) $item as $key => $value)
                                         <label><span class="muted" style="display:block;margin-bottom:.35rem;font-weight:700;">{{ $fieldLabels[$key] ?? ucfirst(str_replace('_', ' ', $key)) }}</span><textarea class="input" name="items[{{ $index }}][{{ $key }}]" rows="2">{{ is_array($value) ? json_encode($value) : $value }}</textarea></label>
                                     @endforeach
@@ -276,7 +276,7 @@ document.querySelectorAll('[data-add-item]').forEach(function (button) {
         const index = indices.length ? Math.max(...indices)+1 : 0;
         const wrap = document.createElement('div');
         wrap.className = 'card';
-        wrap.style.cssText = 'margin-bottom:.75rem;background:rgba(255,253,247,.72);';
+        wrap.style.cssText = 'margin-bottom:.75rem;background:rgba(var(--g-surface-rgb), .72);';
         wrap.innerHTML = '<div class="card-body grid grid-4" style="padding:1rem;"><label><span class="muted" style="display:block;margin-bottom:.35rem;font-weight:700;">title</span><textarea class="input" name="items['+index+'][title]" rows="2"></textarea></label><label><span class="muted" style="display:block;margin-bottom:.35rem;font-weight:700;">description</span><textarea class="input" name="items['+index+'][description]" rows="2"></textarea></label><label><span class="muted" style="display:block;margin-bottom:.35rem;font-weight:700;">icon/url/price</span><textarea class="input" name="items['+index+'][icon]" rows="2"></textarea></label><button class="button button-ghost" type="button" data-remove-item>Hapus Item</button></div>';
         holder.appendChild(wrap);
     });

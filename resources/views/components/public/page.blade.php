@@ -2,9 +2,10 @@
 @php($publicContact = app(\App\Services\Web\PublicCatalogue::class)->contact())
 @php($meta = \App\Services\Web\PublicSeo::page(request(), $title, $description, $publicContact))
 <!doctype html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="id"><head>
+@include('partials.theme')<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 @include('partials.public-seo')
-{{ $head ?? '' }}<link rel="stylesheet" href="{{ asset('css/gayatri-public.css') }}"><link rel="stylesheet" href="{{ asset('css/gayatri-services.css') }}"></head>
+{{ $head ?? '' }}<link rel="stylesheet" href="{{ asset('css/gayatri-public.css').'?v='.config('gayatri_frontend.asset_version') }}"><link rel="stylesheet" href="{{ asset('css/gayatri-services.css').'?v='.config('gayatri_frontend.asset_version') }}"></head>
 <body class="g-public gp-service-page {{ $pageClass }}"><a class="gp-skip" href="#main-content">Lewati ke isi halaman</a>
 <header class="gp-header" data-public-header><div class="gp-container gp-header-inner"><a class="gp-brand" href="{{ route('landing.show') }}" aria-label="Gayatri — Beranda"><x-public.icon name="flower"/><span><strong>GAYATRI</strong><small>Mom & Baby Care</small></span></a>
 <nav class="gp-navigation" aria-label="Menu utama"><a href="{{ route('catalogue.index') }}" @if(request()->routeIs('catalogue.*')) aria-current="page" @endif>Katalog</a><a href="{{ route('landing.booking-page',['service_group'=>'spa']) }}">Pijat & Spa</a><a href="{{ route('landing.booking-page',['service_group'=>'lactation']) }}">Laktasi & ASI</a><a href="{{ route('rental.index') }}">Rental</a><a href="{{ route('laundry.index') }}">Laundry</a></nav><div class="gp-header-actions"><a class="gp-button gp-button-primary gp-header-cta" href="{{ route('landing.show') }}#services">Pilih layanan<x-public.icon name="arrow"/></a><button class="gp-menu-toggle" data-menu-toggle aria-label="Buka menu" aria-expanded="false" aria-controls="public-menu"><x-public.icon name="menu"/></button></div></div></header>

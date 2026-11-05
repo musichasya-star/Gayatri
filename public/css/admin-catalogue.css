@@ -51,7 +51,7 @@
 .catalogue-addon-heading strong { display:block; overflow-wrap:anywhere; }
 .catalogue-save { display:flex; gap:.8rem; justify-content:flex-end; flex-wrap:wrap; position:sticky; bottom:0; padding:1rem; border:1px solid var(--soft-taupe); border-radius:.8rem; background:var(--ivory); box-shadow:var(--shadow-card); z-index:10; }
 .catalogue-picker { width:min(42rem,calc(100% - 2rem)); max-height:85vh; border:1px solid var(--soft-taupe); border-radius:1rem; padding:1.25rem; background:var(--ivory); color:var(--text-dark); }
-.catalogue-picker::backdrop { background:rgba(47,36,29,.5); }
+.catalogue-picker::backdrop { background:rgba(var(--g-ink-rgb), .5); }
 .catalogue-picker h2 { margin:0; font-size:1.25rem; }
 .catalogue-picker label { display:grid; gap:.5rem; margin:1rem 0; }
 .catalogue-picker-results { display:grid; gap:.5rem; max-height:45vh; overflow:auto; }

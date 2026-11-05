@@ -55,7 +55,7 @@
                 }
                 rows.forEach((item) => {
                     const label = document.createElement('label');
-                    label.style.cssText = 'display:flex;gap:.6rem;align-items:center;border:1px solid rgba(216,195,165,.6);border-radius:.75rem;padding:.75rem;';
+                    label.style.cssText = 'display:flex;gap:.6rem;align-items:center;border:1px solid rgba(var(--g-line-rgb), .6);border-radius:.75rem;padding:.75rem;';
                     const input = document.createElement('input');
                     input.type = 'checkbox';
                     input.name = 'addons[]';

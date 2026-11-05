@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title','Produk Pendukung - Gayatri CRM')
-@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css') }}">@endpush
+@push('styles')<link rel="stylesheet" href="{{ asset('css/admin-catalogue.css').'?v='.config('gayatri_frontend.asset_version') }}">@endpush
 @section('content')
 <x-ui.page-header eyebrow="Katalog Produk" title="Produk Pendukung" description="Kelola produk fisik, foto, kategori, dan harga. Ketersediaan serta pemesanan melalui admin."><x-slot name="actions"><a class="button button-secondary" href="{{ route('catalogue.index',['type'=>'retail']) }}">Katalog pelanggan</a><a class="button button-primary" href="{{ route('admin.retail.create', \App\Support\AdminReviewContext::carry(request(),'retail')) }}">Tambah produk</a></x-slot></x-ui.page-header>
 @if(session('status'))<p class="catalogue-notice" role="status">{{ session('status') }}</p>@endif

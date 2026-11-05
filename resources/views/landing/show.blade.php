@@ -15,13 +15,14 @@
 <!doctype html>
 <html lang="id">
 <head>
+@include('partials.theme')
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @include('partials.public-seo')
     <link rel="preload" href="{{ asset('fonts/playfair-display-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ asset('css/gayatri-public.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/gayatri-public.css').'?v='.config('gayatri_frontend.asset_version') }}">
     @if($landing['hero']['video'])
-        <link rel="stylesheet" href="{{ asset('css/gayatri-hero-video.css') }}">
+        <link rel="stylesheet" href="{{ asset('css/gayatri-hero-video.css').'?v='.config('gayatri_frontend.asset_version') }}">
         <script src="{{ asset('js/gayatri-hero-video.js') }}" defer></script>
     @endif
     <script src="{{ asset('js/gayatri-public.js') }}" defer></script>
