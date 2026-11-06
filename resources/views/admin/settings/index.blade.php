@@ -16,8 +16,8 @@
         <div class="card">
             <div class="card-body">
                 <h2 class="section-title" id="provider-ai">Provider AI</h2><p class="wb-scope">Pengaturan provider dipisahkan dari kendali balasan otomatis. Atur bahasa dan layanan di <a href="{{ route('admin.ai.auto-replies.index') }}">Balasan Otomatis</a>; periksa kualitas melalui simulator.</p>
-                <p class="muted" style="margin-bottom:1rem;">Pilih provider dan model AI. API key tidak ditampilkan ulang; isi hanya jika ingin mengganti.</p>
-                <form data-guard-unsaved method="POST" action="{{ route('admin.settings.ai.update') }}" class="grid grid-2">
+                <p class="muted" style="margin-bottom:1rem;">API key disimpan terpisah untuk setiap provider. Test Connection menguji isian saat ini; klik Simpan AI untuk menerapkannya.</p>
+                <form id="ai-settings-form" data-guard-unsaved data-ai-provider-settings="{{ json_encode($aiProviderSettings) }}" method="POST" action="{{ route('admin.settings.ai.update') }}" class="grid grid-2">
                     @csrf
                     <label>
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Provider</span>
@@ -41,7 +41,8 @@
                     </label>
                     <label data-ai-key-field style="grid-column:1/-1;">
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">API Key</span>
-                        <input class="input" type="password" name="api_key" placeholder="{{ $settings['ai.api_key_set'] ? 'API key sudah tersimpan. Isi untuk mengganti.' : 'Masukkan API key provider AI' }}">
+                        <input class="input" type="password" name="api_key" autocomplete="new-password" spellcheck="false" placeholder="{{ $settings['ai.api_key_set'] ? 'API key provider ini sudah tersimpan. Isi untuk mengganti.' : 'Masukkan API key provider AI yang dipilih' }}">
+                        <small class="muted">Kunci OpenRouter digunakan pada provider OpenRouter, termasuk untuk model OpenAI yang tersedia di sana.</small>
                     </label>
 <details class="ops-section" style="grid-column:1/-1"><summary>Pengaturan lanjutan · variasi jawaban & batas keluaran</summary><div class="ops-section-body ops-fields">                    <label>
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Temperature</span>
@@ -52,12 +53,9 @@
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Max Tokens</span>
                         <input class="input" type="number" min="100" max="8000" name="max_tokens" value="{{ old('max_tokens', $settings['ai.max_tokens']) }}" required>
                     </label>
-</div></details>                    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;"><button class="button button-primary" type="submit"><i data-lucide="save"></i> Simpan AI</button></div>
+</div></details>                    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;flex-wrap:wrap;gap:.7rem;"><button class="button button-secondary" type="submit" formaction="{{ route('admin.settings.ai.test') }}" data-ai-test><i data-lucide="activity"></i> Test Connection AI</button><button class="button button-primary" type="submit"><i data-lucide="save"></i> Simpan AI</button></div>
                 </form>
-                <form method="POST" action="{{ route('admin.settings.ai.test') }}" style="margin-top:1rem;display:flex;justify-content:flex-end;">
-                    @csrf
-                    <button class="button button-secondary" type="submit"><i data-lucide="activity"></i> Test Connection AI</button>
-                </form>
+                <p class="wb-scope" data-ai-test-result role="status" hidden></p>
             </div>
         </div>
 

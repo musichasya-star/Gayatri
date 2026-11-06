@@ -3,15 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\AI\AiConnectionProbe;
 use App\Services\AppSettingService;
 use App\Services\CRM\AuditLogService;
 use App\Services\WhatsApp\GatewayConfig;
 use App\Services\WhatsApp\WahaService;
 use App\Services\WhatsApp\WhatsAppGateway;
-use Illuminate\Http\Client\Response;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Throwable;
@@ -39,6 +40,7 @@ class SettingController extends Controller
             'aiProviders' => self::AI_PROVIDERS,
             'aiModels' => self::AI_MODELS,
             'settings' => $this->currentSettings(),
+            'aiProviderSettings' => collect(self::AI_PROVIDERS)->mapWithKeys(fn ($provider) => [$provider => ['api_key_set' => filled($this->settings->aiApiKey($provider)), 'model' => $this->settings->get('ai.providers.'.$provider.'.model', $provider === config('ai.provider') ? config('ai.model') : self::AI_MODELS[$provider][0])]])->all(),
             'gatewayProvider' => GatewayConfig::provider(),
             'gatewaySettings' => collect(['baileys', 'waha'])->mapWithKeys(fn ($provider) => [$provider => [
                 'base_url' => config($provider.'.base_url'),
@@ -65,16 +67,26 @@ class SettingController extends Controller
             return back()->withErrors(['model' => 'Model AI tidak sesuai dengan provider yang dipilih.'])->withInput($request->except(['api_key', 'webhook_secret']));
         }
 
-        $this->settings->setMany([
-            'ai.provider' => $data['provider'],
-            'ai.model' => $data['model'],
-            'ai.temperature' => $data['temperature'],
-            'ai.max_tokens' => $data['max_tokens'],
-        ]);
-
-        if (filled($data['api_key'] ?? null)) {
-            $this->settings->set('ai.api_key', $data['api_key']);
+        $key = filled($data['api_key'] ?? null) ? trim($data['api_key']) : $this->settings->aiApiKey($data['provider']);
+        if (filled($key) && ($mismatch = $this->settings->aiKeyMismatch($data['provider'], $key))) {
+            return back()->withErrors(['api_key' => $mismatch])->withInput($request->only(['provider', 'model', 'temperature', 'max_tokens']));
         }
+        DB::transaction(function () use ($data, $key) {
+            $previous = (string) config('ai.provider', 'local');
+            $previousKey = $this->settings->aiApiKey($previous);
+            if ($previous !== 'local' && filled($previousKey)) {
+                $this->settings->set('ai.providers.'.$previous.'.api_key', $previousKey);
+            }
+            if ($data['provider'] !== 'local') {
+                $this->settings->set('ai.providers.'.$data['provider'].'.api_key', $key);
+            }
+            $this->settings->setMany([
+                'ai.provider' => $data['provider'], 'ai.model' => $data['model'],
+                'ai.temperature' => $data['temperature'], 'ai.max_tokens' => $data['max_tokens'],
+                'ai.providers.'.$data['provider'].'.model' => $data['model'],
+                'ai.api_key' => $key, 'ai.api_key_provider' => $data['provider'],
+            ]);
+        });
 
         $this->settings->applyToConfig();
         $this->auditLogService->log($request->user(), 'settings.ai.update', null, $request, [], [
@@ -175,77 +187,29 @@ class SettingController extends Controller
         return back()->with('status', 'Koneksi '.$label.' berhasil. Sessions terdeteksi: '.count($sessions).'.');
     }
 
-    public function testAi(Request $request): RedirectResponse
+    public function testAi(Request $request, AiConnectionProbe $probe): RedirectResponse|JsonResponse
     {
         $this->settings->applyToConfig();
-
-        $provider = (string) config('ai.provider', 'local');
-        $model = (string) config('ai.model', 'local-deterministic');
-        $apiKey = (string) config('ai.api_key', '');
-
-        if ($provider === 'local') {
-            $this->auditLogService->log($request->user(), 'settings.ai.test_success', null, $request, [], [
-                'provider' => $provider,
-                'model' => $model,
-            ], 'AI connection test success');
-
-            return back()->with('status', 'Koneksi AI local berhasil. Provider local tidak membutuhkan API key.');
+        $data = $request->validate([
+            'provider' => ['sometimes', 'required', Rule::in(self::AI_PROVIDERS)],
+            'model' => ['sometimes', 'required', 'string', 'max:255'],
+            'api_key' => ['nullable', 'string', 'max:500'],
+        ]);
+        $provider = $data['provider'] ?? (string) config('ai.provider', 'local');
+        $model = $data['model'] ?? (string) config('ai.model', 'local-deterministic');
+        if (! in_array($model, self::AI_MODELS[$provider], true)) {
+            $result = ['ok' => false, 'code' => 'model_provider_mismatch', 'message' => 'Model AI tidak sesuai dengan provider yang dipilih.', 'http_status' => null];
+        } else {
+            $key = filled($data['api_key'] ?? null) ? trim($data['api_key']) : $this->settings->aiApiKey($provider);
+            $result = $probe->inspect($provider, $model, $key);
+        }
+        $safeModel = in_array($model, self::AI_MODELS[$provider], true) ? $model : 'invalid';
+        $this->auditLogService->log($request->user(), $result['ok'] ? 'settings.ai.test_success' : 'settings.ai.test_failed', null, $request, [], ['provider' => $provider, 'model' => $safeModel, 'status' => $result['http_status'], 'error' => $result['ok'] ? null : $result['code']], 'AI connection test; credentials and provider error bodies omitted');
+        if ($request->expectsJson()) {
+            return response()->json($result + ['provider' => $provider, 'model' => $safeModel], $result['ok'] ? 200 : 422);
         }
 
-        if (blank($apiKey)) {
-            $this->auditLogService->log($request->user(), 'settings.ai.test_failed', null, $request, [], [
-                'provider' => $provider,
-                'model' => $model,
-                'error' => 'missing_api_key',
-            ], 'AI connection test failed');
-
-            return back()->withErrors(['ai' => 'Koneksi AI gagal: API key belum disimpan untuk provider '.$provider.'.']);
-        }
-
-        try {
-            $response = $this->testAiProvider($provider, $model, $apiKey);
-        } catch (Throwable $exception) {
-            $this->auditLogService->log($request->user(), 'settings.ai.test_failed', null, $request, [], [
-                'provider' => $provider,
-                'model' => $model,
-                'error' => $exception->getMessage(),
-            ], 'AI connection test failed');
-
-            return back()->withErrors(['ai' => 'Koneksi AI gagal: '.$exception->getMessage()]);
-        }
-
-        if (! $response->successful()) {
-            $message = $response->json('error.message') ?: $response->json('message') ?: 'HTTP '.$response->status();
-            $this->auditLogService->log($request->user(), 'settings.ai.test_failed', null, $request, [], [
-                'provider' => $provider,
-                'model' => $model,
-                'status' => $response->status(),
-                'error' => $message,
-            ], 'AI connection test failed');
-
-            return back()->withErrors(['ai' => 'Koneksi AI gagal: '.$message]);
-        }
-
-        $this->auditLogService->log($request->user(), 'settings.ai.test_success', null, $request, [], [
-            'provider' => $provider,
-            'model' => $model,
-            'status' => $response->status(),
-        ], 'AI connection test success');
-
-        return back()->with('status', 'Koneksi AI berhasil untuk provider '.ucfirst($provider).' model '.$model.'.');
-    }
-
-    private function testAiProvider(string $provider, string $model, string $apiKey): Response
-    {
-        $timeout = 15;
-
-        return match ($provider) {
-            'openrouter' => Http::timeout($timeout)->acceptJson()->withToken($apiKey)->get('https://openrouter.ai/api/v1/auth/key'),
-            'openai' => Http::timeout($timeout)->acceptJson()->withToken($apiKey)->get('https://api.openai.com/v1/models/'.$model),
-            'deepseek' => Http::timeout($timeout)->acceptJson()->withToken($apiKey)->get('https://api.deepseek.com/models'),
-            'gemini' => Http::timeout($timeout)->acceptJson()->get('https://generativelanguage.googleapis.com/v1beta/models', ['key' => $apiKey]),
-            default => throw new \InvalidArgumentException('Provider AI tidak didukung.'),
-        };
+        return $result['ok'] ? back()->with('status', $result['message']) : back()->withErrors(['ai' => $result['message']]);
     }
 
     private function currentSettings(): array
@@ -253,7 +217,7 @@ class SettingController extends Controller
         return [
             'ai.provider' => $this->settings->get('ai.provider', config('ai.provider', 'local')) ?: 'local',
             'ai.model' => $this->settings->get('ai.model', config('ai.model', 'local-deterministic')) ?: 'local-deterministic',
-            'ai.api_key_set' => filled($this->settings->get('ai.api_key', config('ai.api_key'))),
+            'ai.api_key_set' => filled($this->settings->aiApiKey((string) config('ai.provider', 'local'))),
             'ai.temperature' => $this->settings->get('ai.temperature', config('ai.temperature', 0.3)),
             'ai.max_tokens' => $this->settings->get('ai.max_tokens', config('ai.max_tokens', 800)),
             'waha.base_url' => $this->settings->get('waha.base_url', config('waha.base_url', 'http://localhost:3000')),

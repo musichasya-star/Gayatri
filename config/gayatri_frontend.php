@@ -2,6 +2,7 @@
 
 return [
     'asset_version' => 'pink-ocean-20261105',
+    'admin_script_version' => 'ai-provider-keys-20261106',
     'hero_video' => [
         'desktop' => '/videos/landing/spa-desktop-v2.mp4',
         'mobile' => '/videos/landing/spa-mobile-v1.mp4',

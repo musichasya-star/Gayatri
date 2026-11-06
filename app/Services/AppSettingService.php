@@ -54,12 +54,43 @@ class AppSettingService
         }
     }
 
+    public function aiApiKey(string $provider): string
+    {
+        if (! in_array($provider, ['openai', 'openrouter', 'gemini', 'deepseek'], true)) {
+            return '';
+        }
+        $scoped = $this->get('ai.providers.'.$provider.'.api_key');
+        if ($scoped !== null) {
+            return $this->aiKeyMismatch($provider, (string) $scoped) === null ? (string) $scoped : '';
+        }
+        $legacy = (string) $this->get('ai.api_key', config('ai.api_key', ''));
+        $owner = $this->get('ai.api_key_provider', $this->get('ai.provider', config('ai.provider', 'local')));
+
+        return $owner === $provider && $this->aiKeyMismatch($provider, $legacy) === null ? $legacy : '';
+    }
+
+    /** Reject recognizable keys from another provider without disclosing their value. */
+    public function aiKeyMismatch(string $provider, string $key): ?string
+    {
+        $owner = match (true) {
+            str_starts_with($key, 'sk-or-') => 'openrouter',
+            str_starts_with($key, 'sk-proj-'), str_starts_with($key, 'sk-svcacct-') => 'openai',
+            str_starts_with($key, 'AIza') => 'gemini',
+            default => null,
+        };
+
+        return $owner !== null && $owner !== $provider
+            ? 'API key ini milik '.ucfirst($owner).'. Pilih provider yang sesuai atau masukkan API key '.ucfirst($provider).'.'
+            : null;
+    }
+
     public function applyToConfig(): void
     {
+        $provider = (string) $this->get('ai.provider', config('ai.provider', 'local'));
         config([
             'whatsapp.provider' => $this->get('whatsapp.provider', config('whatsapp.provider', 'waha')),
-            'ai.provider' => $this->get('ai.provider', config('ai.provider')),
-            'ai.api_key' => $this->get('ai.api_key', config('ai.api_key')),
+            'ai.provider' => $provider,
+            'ai.api_key' => $this->aiApiKey($provider),
             'ai.model' => $this->get('ai.model', config('ai.model')),
             'ai.temperature' => (float) $this->get('ai.temperature', config('ai.temperature', 0.3)),
             'ai.max_tokens' => (int) $this->get('ai.max_tokens', config('ai.max_tokens', 800)),
@@ -80,6 +111,7 @@ class AppSettingService
 
     private function isSecret(string $key): bool
     {
-        return in_array($key, ['ai.api_key', 'waha.api_key', 'waha.webhook_secret', 'baileys.api_key', 'baileys.webhook_secret'], true);
+        return in_array($key, ['ai.api_key', 'waha.api_key', 'waha.webhook_secret', 'baileys.api_key', 'baileys.webhook_secret'], true)
+            || preg_match('/^ai\.providers\.(openai|openrouter|gemini|deepseek)\.api_key$/D', $key) === 1;
     }
 }

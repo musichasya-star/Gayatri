@@ -27,7 +27,7 @@ class AiLunaModelTest extends TestCase
     public function test_admin_can_choose_luna_without_replacing_the_existing_key(string $provider, string $model, string $url): void
     {
         $settings = app(AppSettingService::class);
-        $settings->set('ai.api_key', 'existing-private-test-key');
+        $settings->setMany(['ai.api_key' => 'existing-private-test-key', 'ai.provider' => $provider, 'ai.api_key_provider' => $provider]);
         $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
         $this->get(route('admin.settings.index'))->assertOk()->assertSee('GPT-6-Luna')->assertSee('value="'.$model.'"', false)->assertDontSee('existing-private-test-key');
         $this->post(route('admin.settings.ai.update'), ['provider' => $provider, 'model' => $model, 'api_key' => '', 'temperature' => 0.3, 'max_tokens' => 800])->assertRedirect()->assertSessionHasNoErrors();
