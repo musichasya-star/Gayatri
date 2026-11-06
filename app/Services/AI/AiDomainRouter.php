@@ -14,6 +14,7 @@ class AiDomainRouter
     public function route(string $message, array $context = []): array
     {
         $text = trim(app(AiMessageUnderstanding::class)->normalize($message), " \t\n\r\0\x0B.!?,");
+        $text = preg_replace('/[,!?]+(?=\s)/u', '', $text);
         $result = ['domain' => null, 'intent' => 'faq', 'reason_code' => 'domain_clarification', 'candidates' => []];
         $topicCorrection = false;
         if (preg_match('/^(0|admin|manusia|operator|stop|berhenti)$/u', $text)
@@ -118,8 +119,11 @@ class AiDomainRouter
         if (preg_match('/\b(komplain|kecewa|tidak puas|marah)\b/u', $text)) {
             return array_replace($result, ['intent' => 'human_handoff', 'reason_code' => 'sensitive_request']);
         }
-        if (preg_match('/^(?:(?:halo|hai|hi|pagi|siang|sore|malam|assalamualaikum)(?:\s+(?:min|admin|kak|mbak))?|(?:min|kak|mbak)|(?:(?:halo|hai)\s+(?:min|admin|kak|mbak)\s+)?(?:boleh|mau|ingin)\s+tanya(?:\s+dulu)?)[!?,.\s]*$/u', $text)) {
-            return array_replace($result, ['domain' => null, 'intent' => 'main_menu', 'reason_code' => 'greeting']);
+        if (preg_match('/^(?:(?:(?:halo|hai|hi|pagi|siang|sore|malam|selamat\s+(?:pagi|siang|sore|malam)|ass?alamu[\x{2019}\x{0027}]?alaikum|salam)(?:\s+(?:wr\.?\s*wb\.?|warahmatullahi\s+wabarakatuh))?)(?:\s+(?:min|admin|kak|mbak))?|(?:min|kak|mbak)|(?:(?:halo|hai)\s+(?:min|admin|kak|mbak)\s+)?(?:boleh|mau|ingin)\s+tanya(?:\s+dulu)?)[!?,.\s]*$/u', $text)) {
+            return array_replace($result, ['intent' => 'greeting', 'reason_code' => 'greeting']);
+        }
+        if (preg_match('/^(?:apa kabar|gimana kabarnya|kamu siapa|siapa (?:ini|namamu)|ini (?:bot|ai|robot)|lagi apa|sudah makan)(?:\s+(?:ya|min|kak|mbak))*[!?,.\s]*$/u', $text)) {
+            return array_replace($result, ['intent' => 'small_talk', 'reason_code' => 'small_talk']);
         }
         if (preg_match('/^(terima kasih|makasih|makasi|thanks|oke|ok)(?:\s+(?:ya|min|kak|mbak|banyak))*[!.,\s]*$/u', $text)) {
             return array_replace($result, ['intent' => 'thanks', 'reason_code' => 'thanks']);

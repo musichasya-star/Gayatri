@@ -74,7 +74,7 @@ class AiConversationOrchestrator
         $base['next_context'] = ['domain' => $domain, 'menu' => $domain && $domain !== 'general' ? 'domain' : 'main',
             'expected_revision' => (int) ($state['revision'] ?? 0)];
         $text = app(AiMessageUnderstanding::class)->normalize($message);
-        if ($intent === 'status_lookup' || (isset($state['lookup']) && ! in_array($intent, ['main_menu', 'human_handoff', 'medical'], true)
+        if ($intent === 'status_lookup' || (isset($state['lookup']) && ! in_array($intent, ['main_menu', 'greeting', 'small_talk', 'human_handoff', 'medical'], true)
             && ! ($routing['candidates'] && ($routing['domain'] !== ($state['domain'] ?? null))))) {
             return app(AiTransactionLookup::class)->respond($message, $state, $input, $base);
         }
@@ -90,18 +90,43 @@ class AiConversationOrchestrator
 
             return $base;
         }
+        if (in_array($intent, ['greeting', 'small_talk'], true)) {
+            $base['next_context'] = array_replace($base['next_context'], array_intersect_key($state, array_flip(['domain', 'menu', 'catalog_item_id', 'lookup'])));
+            $base['reply'] = match (true) {
+                str_contains($text, 'alaikum') => 'Waalaikumsalam, Bunda. Ada yang bisa saya bantu?',
+                (bool) preg_match('/(?:selamat )?(pagi|siang|sore|malam)/u', $text, $greeting) => 'Selamat '.$greeting[1].' juga, Bunda. Ada yang ingin ditanyakan?',
+                $intent === 'small_talk' => 'Saya asisten virtual Gayatri, Bunda. Siap membantu pertanyaan seputar layanan kami.',
+                default => 'Halo, Bunda. Boleh, mau tanya apa?',
+            };
+
+            return $base;
+        }
         if ($intent === 'thanks') {
             $base['reply'] = 'Sama-sama Bunda. Ketik menu untuk memilih layanan atau admin jika membutuhkan bantuan.';
 
             return $base;
         }
-        if (in_array($intent, ['main_menu', 'clarify'], true) || ! $domain) {
-            $base['next_context']['domain'] = null;
-            $base['next_context']['menu'] = $intent === 'clarify' ? 'clarify' : 'main';
-            $base['reply'] = ($intent === 'clarify' ? 'Bisa, Bunda. Ada beberapa layanan yang ingin dibahas. Mau mulai dari yang mana?' : 'Halo Bunda, pilih layanan atau langsung tulis kebutuhan Bunda.')
-                ."\n\n".$this->mainMenu($directory);
+        if (! $domain && preg_match('/^[1-5]$/D', $text)) {
+            $base['routing']['intent'] = 'main_menu';
+            $base['routing']['reason_code'] = 'menu_context_missing';
+            $base['next_context']['menu'] = 'main';
+            $base['reply'] = 'Bunda, pilih layanan berikut.'."\n\n".$this->mainMenu($directory);
 
             return $base;
+        }
+        if (in_array($intent, ['main_menu', 'clarify'], true)) {
+            $base['next_context']['domain'] = null;
+            $base['next_context']['menu'] = $intent === 'clarify' ? 'clarify' : 'main';
+            $base['reply'] = $intent === 'clarify'
+                ? 'Bisa, Bunda. Mau mulai dari '.implode(' atau ', array_map(fn ($candidate) => AiDomain::LABELS[$candidate], $routing['candidates'])).' dulu?'
+                : 'Halo Bunda, pilih layanan atau langsung tulis kebutuhan Bunda.'."\n\n".$this->mainMenu($directory);
+
+            return $base;
+        }
+        if (! $domain) {
+            $domain = 'general';
+            $base['routing']['domain'] = 'general';
+            $base['evidence']['domain'] = 'general';
         }
         if (! $facts['ai_enabled']) {
             $base['reply'] = 'Informasi otomatis '.AiDomain::LABELS[$domain].' belum tersedia. Ketik admin untuk bantuan.';

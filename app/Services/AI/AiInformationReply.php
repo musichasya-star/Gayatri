@@ -8,6 +8,8 @@ class AiInformationReply
     {
         $result = app(AiConversationOrchestrator::class)->respond($message, $policy, $context);
 
-        return app(AiResponseComposer::class)->compose($result, $context);
+        $result = app(AiResponseComposer::class)->compose($result, $context);
+
+        return app(AiNaturalConversation::class)->compose($message, $result, $context);
     }
 }

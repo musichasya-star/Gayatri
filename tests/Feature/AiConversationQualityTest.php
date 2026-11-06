@@ -72,7 +72,7 @@ class AiConversationQualityTest extends TestCase
             ['sewa pompa ASI berapa?', 'rental', 'pricing'],
             ['bukan rental, maksudnya laundry', 'laundry', 'domain_menu'],
             ['saya pilih rental saja', 'rental', 'domain_menu'],
-            ['halo min mau tanya', null, 'main_menu'],
+            ['halo min mau tanya', null, 'greeting'],
             ['layanannya apa aja?', null, 'main_menu'],
         ];
     }

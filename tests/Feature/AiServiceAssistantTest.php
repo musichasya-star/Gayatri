@@ -442,10 +442,10 @@ class AiServiceAssistantTest extends TestCase
     {
         Queue::fake();
         $owner = User::factory()->create(['role' => 'owner', 'status' => 'active']);
-        $this->actingAs($owner)->post(route('admin.ai.simulator.test'), ['message' => 'Halo', 'reset_context' => 1])->assertOk()->assertSee('Pijat');
+        $this->actingAs($owner)->post(route('admin.ai.simulator.test'), ['message' => 'menu', 'reset_context' => 1])->assertOk()->assertSee('Pijat');
         $this->post(route('admin.ai.simulator.test'), ['message' => '3'])->assertOk()->assertSee('Rental Perlengkapan Bayi');
         $this->post(route('admin.ai.simulator.test'), ['message' => '3'])->assertOk()->assertSee('/rental');
-        $this->post(route('admin.ai.simulator.test'), ['message' => '3', 'reset_context' => 1])->assertOk()->assertSee('pilih layanan');
+        $this->post(route('admin.ai.simulator.test'), ['message' => '3', 'reset_context' => 1])->assertOk()->assertViewHas('result', fn ($result) => $result['routing']['intent'] === 'main_menu');
         $this->assertDatabaseCount('customers', 0);
         $this->assertDatabaseCount('ai_conversation_contexts', 0);
         $this->assertDatabaseCount('bookings', 0);

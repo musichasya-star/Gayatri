@@ -478,7 +478,7 @@ class AiAdminOperationsTest extends TestCase
         $log = AiLog::firstOrFail();
         $out = $log->outgoingMessage;
         $out->update(['delivered_at' => now(), 'read_at' => now()]);
-        $this->actingAs($this->owner)->get(route('admin.ai.logs.index', ['message_id' => $source->id, 'delivery' => 'read', 'intent' => 'main_menu']))->assertOk()->assertSee('Dibaca')->assertSee('1 keputusan');
+        $this->actingAs($this->owner)->get(route('admin.ai.logs.index', ['message_id' => $source->id, 'delivery' => 'read', 'intent' => 'greeting']))->assertOk()->assertSee('Dibaca')->assertSee('1 keputusan');
         $this->get(route('admin.ai.logs.index', ['message_id' => $source->id, 'delivery' => 'failed']))->assertOk()->assertSee('Belum ada keputusan yang sesuai filter');
     }
 

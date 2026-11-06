@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use App\Models\AiPersona;
 use App\Models\KnowledgeBase;
 use Illuminate\Support\Facades\DB;
 
@@ -18,6 +19,12 @@ class AiReplyEvidence
 
     public function problem(array $evidence, int $conversationId): ?string
     {
+        if (isset($evidence['persona'])) {
+            $persona = AiPersona::find($evidence['persona']['id']);
+            if (! $persona || ! $persona->is_active || ! hash_equals(app(AiNaturalConversation::class)->personaHash($persona), $evidence['persona']['hash'])) {
+                return 'persona_changed';
+            }
+        }
         if (isset($evidence['preferences']) && ! hash_equals(app(AiConversationPreferences::class)->fingerprint(), $evidence['preferences'])) {
             return 'reply_preferences_changed';
         }

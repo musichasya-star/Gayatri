@@ -67,9 +67,10 @@ class AiService
             if (($context['mode'] ?? '') === 'preview' && $policy['available'] && isset($context['information_preferences'])) {
                 $policy['enabled'] = true;
             }
-            $result = app(AiInformationReply::class)->respond($message, $policy, $context);
+            $result = app(AiInformationReply::class)->respond($message, $policy, $context + ['persona' => $persona]);
             $context['safe_information'] = true;
-            $context['reply_source'] = ($result['sources'] ?? []) ? 'scoped_knowledge' : 'information_web';
+            $context['reply_source'] = isset($result['generation']['provider']) ? 'grounded_ai' : (($result['sources'] ?? []) ? 'scoped_knowledge' : 'information_web');
+            $context['generation'] = $result['generation'] ?? [];
             $context['policy'] = $policy;
             $context['routing'] = $result['routing'] ?? [];
             $context['next_context'] = $result['next_context'] ?? null;
@@ -1086,8 +1087,9 @@ class AiService
                 'mode' => $context['mode'] ?? 'unknown',
                 'reply_source' => $context['reply_source'] ?? 'system',
                 'reply_rule' => $context['reply_rule'] ?? null,
-                'provider' => ($context['safe_information'] ?? false) ? 'local' : config('ai.provider', 'local'),
-                'model' => ($context['safe_information'] ?? false) ? 'scoped-information' : config('ai.model'),
+                'provider' => $context['generation']['provider'] ?? (($context['safe_information'] ?? false) ? 'local' : config('ai.provider', 'local')),
+                'model' => $context['generation']['model'] ?? (($context['safe_information'] ?? false) ? 'scoped-information' : config('ai.model')),
+                'generation' => $context['generation'] ?? [],
                 'policy' => $context['policy'] ?? null,
                 'routing' => $context['routing'] ?? null,
                 'evidence' => array_diff_key($context['evidence'] ?? [], ['lookup' => true]),

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class AiTraceService
 {
-    public const INTENTS = ['pricing' => 'Tarif', 'catalog' => 'Katalog', 'faq' => 'Pertanyaan layanan', 'terms' => 'Ketentuan',
+    public const INTENTS = ['greeting' => 'Sapaan', 'small_talk' => 'Percakapan ringan', 'pricing' => 'Tarif', 'catalog' => 'Katalog', 'faq' => 'Pertanyaan layanan', 'terms' => 'Ketentuan',
         'home_service' => 'Kunjungan / antar-jemput', 'availability' => 'Ketersediaan', 'payment_help' => 'Pembayaran manual', 'web_order' => 'Pemesanan web'];
 
     public const STATES = ['generated' => 'Sedang disiapkan', 'queued' => 'Menunggu worker', 'simulation' => 'Simulasi',
@@ -18,7 +18,7 @@ class AiTraceService
         'read' => 'Dibaca', 'failed' => 'Gagal', 'unknown' => 'Belum pasti terkirim', 'skipped' => 'Tidak dikirim', 'legacy' => 'Histori sebelum penelusuran'];
 
     public const REASONS = [
-        'greeting' => 'Sapaan awal', 'menu_requested' => 'Pelanggan membuka menu', 'menu_choice' => 'Pilihan layanan', 'submenu_choice' => 'Pilihan pada menu layanan',
+        'greeting' => 'Sapaan awal', 'small_talk' => 'Percakapan ringan', 'menu_context_missing' => 'Pilihan angka memerlukan menu baru', 'menu_requested' => 'Pelanggan membuka menu', 'menu_choice' => 'Pilihan layanan', 'submenu_choice' => 'Pilihan pada menu layanan',
         'domain_resolved' => 'Layanan dikenali', 'domain_clarification' => 'Layanan perlu diperjelas', 'multiple_domains' => 'Beberapa layanan disebut sekaligus',
         'scoped_knowledge' => 'FAQ terbit sesuai layanan', 'system_procedure' => 'Panduan alur layanan', 'knowledge_missing' => 'Informasi belum tersedia',
         'multi_intent_answer' => 'Beberapa kebutuhan dijawab dari sumber resmi',

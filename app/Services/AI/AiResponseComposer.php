@@ -31,6 +31,8 @@ class AiResponseComposer
             $result['next_context']['domain'] = null;
             $result['next_context']['menu'] = null;
             $result['next_context']['lookup'] = null;
+        } elseif ($intent === 'greeting' && ($input['mode'] ?? '') === 'preview') {
+            $result['reply'] = $settings['greeting'];
         } elseif ($intent === 'main_menu') {
             $parts = explode("\n\n", $result['reply'], 2);
             $result['reply'] = $settings['greeting']."\n\n".($parts[1] ?? $result['reply']);
@@ -39,7 +41,12 @@ class AiResponseComposer
         } elseif ($intent === 'human_handoff') {
             $result['reply'] = $settings['handoff'];
         } elseif ($intent === 'domain_menu' && isset($settings['domain_prompts'][$domain ?? ''])) {
-            $result['reply'] = AiDomain::LABELS[$domain]."\n".$settings['domain_prompts'][$domain]."\n\n1. Katalog & tarif\n2. Ketentuan layanan\n3. Pesan melalui web\n4. Cek status transaksi\n9. Menu utama\n0. Bicara dengan admin";
+            $result['reply'] = AiDomain::LABELS[$domain]."\n".$settings['domain_prompts'][$domain];
+            if ($reason === 'menu_choice') {
+                $result['reply'] .= "\n\n1. Katalog & tarif\n2. Ketentuan layanan\n3. Pesan melalui web\n4. Cek status transaksi\n9. Menu utama\n0. Bicara dengan admin";
+            } else {
+                $result['next_context']['menu'] = 'conversation';
+            }
         } elseif ($reason === 'knowledge_missing') {
             $result['reply'] = $settings['fallback'];
         }

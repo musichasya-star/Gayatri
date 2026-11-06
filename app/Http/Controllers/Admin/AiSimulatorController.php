@@ -50,6 +50,7 @@ class AiSimulatorController extends Controller
         }
         if ($request->boolean('resume_context')) {
             $context = [];
+            $history = [];
         }
         if (isset($context['lookup_encrypted'])) {
             try {
@@ -60,6 +61,7 @@ class AiSimulatorController extends Controller
         }
         $context['demo_profile_id'] = $profileId;
         $context['include_demo'] = $includeDemo;
+        $context['history'] = $history;
         if (($context['human_handled'] ?? false) && ! app(AiInteractionPolicy::class)->allowsLegacyAutomation()) {
             $result = ['reply' => 'Simulasi sedang ditangani admin. Pilih “Lanjutkan AI pada simulator” atau mulai percakapan baru untuk menguji pesan berikutnya.',
                 'status' => 'blocked', 'confidence' => 0, 'fallback_reason' => 'human_takeover', 'sources' => [], 'log_id' => null,
@@ -81,6 +83,7 @@ class AiSimulatorController extends Controller
         }
         $privacy = app(AiAuditPrivacy::class);
         $history[] = ['question' => $privacy->text($data['message']), 'answer' => $privacy->text($result['reply']),
+            'intent' => $result['routing']['intent'] ?? null,
             'domain' => $result['routing']['domain'] ?? null, 'reason' => $result['routing']['reason_code'] ?? null,
             'status' => $result['status'], 'log_id' => $result['log_id']];
         $history = array_slice($history, -10);
