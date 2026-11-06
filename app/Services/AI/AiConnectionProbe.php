@@ -24,7 +24,7 @@ class AiConnectionProbe
             $request = Http::timeout(15)->connectTimeout(5)->acceptJson()->withoutRedirecting();
             $response = match ($provider) {
                 'openai' => $request->withToken($key)->get('https://api.openai.com/v1/models/'.rawurlencode($model)),
-                'openrouter' => $request->withToken($key)->get('https://openrouter.ai/api/v1/auth/key'),
+                'openrouter' => $request->withToken($key)->get('https://openrouter.ai/api/v1/key'),
                 'deepseek' => $request->withToken($key)->get('https://api.deepseek.com/models'),
                 'gemini' => $request->get('https://generativelanguage.googleapis.com/v1beta/models', ['key' => $key]),
                 default => null,

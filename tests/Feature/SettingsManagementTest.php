@@ -70,7 +70,7 @@ class SettingsManagementTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         Http::fake([
-            'https://openrouter.ai/api/v1/auth/key' => Http::response(['data' => ['label' => 'test-key']], 200),
+            'https://openrouter.ai/api/v1/key' => Http::response(['data' => ['label' => 'test-key']], 200),
         ]);
         app(AppSettingService::class)->setMany([
             'ai.provider' => 'openrouter',
@@ -83,7 +83,7 @@ class SettingsManagementTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('status');
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/auth/key'
+        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/key'
             && $request->hasHeader('Authorization', 'Bearer sk-openrouter-test'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.ai.test_success']);
     }
