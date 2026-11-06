@@ -114,7 +114,7 @@ class AiServiceDirectory
             return (int) $matches->first()['id'];
         }
         if ($matches->isEmpty() && ! preg_match('/\b(?:\d+\s*(?:sesi|kunjungan|menit)|baby|toddler|kid|private|reguler|premium|advance|shower|berendam|bidan|dokter|weekday|weekend)\b/u', $text)
-            && ($state['domain'] ?? null) === $domain && preg_match('/\b(itu|tadi|tersebut|harganya|berapa)\b/u', $text)
+            && ($state['domain'] ?? null) === $domain && preg_match('/\b(itu|tadi|tersebut|harganya|berapa|booking|reservasi|pesan)\b/u', $text)
             && collect($items)->contains('id', $state['catalog_item_id'] ?? null)) {
             return (int) $state['catalog_item_id'];
         }

@@ -18,6 +18,7 @@ class AiMessageUnderstanding
             'dlu' => 'dulu', 'pgn' => 'ingin', 'pengen' => 'ingin', 'pesen' => 'pesan', 'nyewa' => 'sewa',
             'nyuci' => 'laundry', 'londry' => 'laundry', 'loundry' => 'laundry', 'laundri' => 'laundry',
             'stroler' => 'stroller', 'stoler' => 'stroller', 'boking' => 'booking', 'bokng' => 'booking',
+            'bookingnya' => 'booking', 'reservasinya' => 'reservasi', 'pesannya' => 'pesan',
             'konsul' => 'konsultasi', 'trf' => 'transfer', 'byr' => 'bayar', 'ongkirnya' => 'ongkir',
             'dibalikin' => 'dikembalikan', 'balikin' => 'pengembalian', 'kembaliin' => 'pengembalian',
             'bersihnya' => 'kebersihan', 'bersihin' => 'kebersihan', 'dicuci' => 'cuci',
@@ -43,6 +44,7 @@ class AiMessageUnderstanding
             'weighing' => '/\b(timbang|penimbangan|berat)\b/u',
             'quality' => '/\b(kualitas|quality|qc)\b/u',
             'privacy' => '/\b(privasi|kerahasiaan)\b/u',
+            'eligibility' => '/\b(usia|umur|cocok|minimal|minimum usia)\b/u',
         ];
 
         return array_keys(array_filter($topics, fn ($pattern) => preg_match($pattern, $text)));
@@ -53,7 +55,7 @@ class AiMessageUnderstanding
         $text = $this->normalize($message);
         $aliases = ['preparation' => 'persiapan', 'hygiene' => 'kebersihan perawatan', 'completeness' => 'kelengkapan',
             'return' => 'pengembalian', 'deposit' => 'deposit', 'companion' => 'pendamping', 'scent' => 'pewangi',
-            'stain' => 'noda', 'weighing' => 'timbang', 'quality' => 'kualitas', 'privacy' => 'privasi'];
+            'stain' => 'noda', 'weighing' => 'timbang', 'quality' => 'kualitas', 'privacy' => 'privasi', 'eligibility' => 'usia umur syarat'];
         foreach ($this->topics($message) as $topic) {
             $text .= ' '.$aliases[$topic];
         }

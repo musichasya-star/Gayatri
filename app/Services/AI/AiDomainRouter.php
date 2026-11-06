@@ -133,7 +133,7 @@ class AiDomainRouter
             return array_replace($result, ['domain' => 'general', 'intent' => 'retail_catalog', 'reason_code' => 'domain_resolved', 'candidates' => ['general']]);
         }
         if (preg_match('/\b(harga|harganya|tarif|tarifnya|biaya|biayanya|ongkir|price)\b/u', $text)
-            || (preg_match('/\bberapa\b/u', $text) && ! preg_match('/\bberapa (?:lama|hari|jam|menit|kilo|kg)\b/u', $text))) {
+            || (preg_match('/\bberapa\b/u', $text) && ! preg_match('/\bberapa (?:lama|hari|jam|menit|kilo|kg)\b|\b(?:usia|umur|jam buka|lokasi|alamat)\b/u', $text))) {
             $result['intent'] = 'pricing';
         } elseif (preg_match('/\b(durasi|berapa lama|katalog|daftar|layanan apa|alat apa|paket apa)\b/u', $text)) {
             $result['intent'] = 'catalog';

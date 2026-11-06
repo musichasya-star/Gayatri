@@ -144,7 +144,8 @@ class AiConversationOrchestrator
         }
         $selection = $directory->selection($domain, $message, $state);
         $base['next_context']['catalog_item_id'] = $selection;
-        if ($selection && $intent === 'faq' && ! app(AiMessageUnderstanding::class)->topics($message)) {
+        if ($selection && $intent === 'faq' && ! app(AiMessageUnderstanding::class)->topics($message)
+            && ! preg_match('/\b(?:apa|apakah|bagaimana|kenapa|mengapa|boleh|aman|manfaat|untuk|sebelum|sesudah|setelah|jam|alamat|lokasi)\b/u', $text)) {
             $intent = 'catalog';
             $base['routing']['intent'] = 'catalog';
         }

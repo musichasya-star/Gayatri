@@ -141,6 +141,26 @@ class AiNaturalConversationTest extends TestCase
         $this->assertSame('provider_unavailable', AiLog::find($result['log_id'])->meta['generation']['fallback_code']);
     }
 
+    public function test_unknown_citations_and_truncated_provider_output_are_rejected(): void
+    {
+        $this->fakeReply('Selamat malam juga, Bunda.', ['answer', 'unavailable-source']);
+        $answer = app(AiService::class)->simulate('selamat malam');
+        $this->assertSame('information_web', $answer['reply_source']);
+        Http::fake(['*' => Http::response(['choices' => [['finish_reason' => 'length', 'message' => ['content' => '{"reply":"potongan']]]])]);
+        $answer = app(AiService::class)->simulate('selamat malam');
+        $this->assertSame('information_web', $answer['reply_source']);
+        $this->assertStringNotContainsString('potongan', $answer['reply']);
+    }
+
+    public function test_openrouter_uses_its_own_endpoint_for_the_safe_conversation_path(): void
+    {
+        config(['ai.provider' => 'openrouter', 'ai.model' => 'openai/gpt-6-luna']);
+        $this->fakeReply('Waalaikumsalam, Bunda. Ada yang bisa saya bantu?');
+        $answer = app(AiService::class)->simulate('assalamualaikum');
+        $this->assertSame('grounded_ai', $answer['reply_source']);
+        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions' && $request['model'] === 'openai/gpt-6-luna');
+    }
+
     public function test_explicit_menu_status_and_medical_requests_do_not_go_to_model(): void
     {
         $menu = app(AiService::class)->simulate('menu');
@@ -153,7 +173,7 @@ class AiNaturalConversationTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_catalog_prices_and_links_cannot_be_dropped_by_the_model(): void
+    public function test_catalog_duration_cannot_be_dropped_by_the_model(): void
     {
         Service::create(['name' => 'Baby Massage', 'service_group' => 'spa', 'price' => 40000, 'duration_minutes' => 30, 'is_active' => true]);
         $this->fakeReply('Baby Massage harganya Rp40.000, Bunda.');
@@ -161,6 +181,28 @@ class AiNaturalConversationTest extends TestCase
         $this->assertSame('information_web', $answer['reply_source']);
         $this->assertStringContainsString('30 menit', $answer['reply']);
         $this->assertStringContainsString('https://gayatri.test/', $answer['reply']);
+    }
+
+    public function test_price_answer_can_be_natural_without_an_unrequested_booking_link(): void
+    {
+        Service::create(['name' => 'Baby Massage', 'service_group' => 'spa', 'price' => 40000, 'duration_minutes' => 30, 'is_active' => true]);
+        $this->fakeReply('Baby Massage 30 menit harganya Rp40.000 sesuai tarif katalog. Jadwal dan rincian akhir diperiksa saat pemesanan.');
+        $result = app(AiService::class)->simulate('harga Baby Massage?');
+        $this->assertSame('grounded_ai', $result['reply_source']);
+        $followup = app(AiService::class)->simulate('bagaimana cara bookingnya?', null, $result['next_context']);
+        $this->assertSame('web_order', $followup['routing']['intent']);
+        $this->assertStringContainsString('https://gayatri.test/booking?service_id=', $followup['reply']);
+        $this->assertSame('information_web', $followup['reply_source']);
+    }
+
+    public function test_age_question_about_selected_product_looks_for_faq_instead_of_repeating_prices(): void
+    {
+        config(['ai.provider' => 'local']);
+        $service = Service::create(['name' => 'Baby Massage', 'service_group' => 'spa', 'price' => 40000, 'duration_minutes' => 30, 'is_active' => true]);
+        $answer = app(AiService::class)->simulate('yang tadi untuk usia berapa?', null, ['domain' => 'spa', 'catalog_item_id' => $service->id]);
+        $this->assertSame('faq', $answer['routing']['intent']);
+        $this->assertSame('knowledge_missing', $answer['routing']['reason_code']);
+        $this->assertStringNotContainsString('Rp40.000', $answer['reply']);
     }
 
     public function test_real_history_is_scoped_recent_sent_public_and_after_resume_boundary(): void
@@ -171,13 +213,18 @@ class AiNaturalConversationTest extends TestCase
         $old = Message::create($base + ['content' => 'sebelum admin mengambil alih']);
         $conversation->update(['ai_reply_after_message_id' => $old->id]);
         Message::create($base + ['content' => 'mau tanya stroller']);
+        Message::create(array_replace($base, ['direction' => 'outgoing', 'sender_type' => 'ai', 'content' => 'Mau lihat katalog stroller?', 'sent_at' => now()]));
+        $expired = Message::create($base + ['content' => 'pesan terlalu lama']);
+        $expired->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        $other = Conversation::create(['customer_id' => $customer->id, 'wa_chat_id' => 'other-chat@c.us', 'ai_enabled' => true, 'status' => 'open']);
+        Message::create(array_replace($base, ['conversation_id' => $other->id, 'content' => 'rahasia percakapan lain']));
         Message::create(array_replace($base, ['direction' => 'outgoing', 'sender_type' => 'ai', 'content' => 'pesan gagal', 'failed_at' => now()]));
         Message::create(array_replace($base, ['direction' => 'outgoing', 'sender_type' => 'user', 'content' => 'catatan staf privat', 'sent_at' => now()]));
         Message::create($base + ['content' => 'cek status RENT-SECRET-1 08123456789']);
         Message::create(array_replace($base, ['direction' => 'outgoing', 'sender_type' => 'ai', 'content' => 'Hasil privat', 'sent_at' => now(), 'ai_reply_context' => ['evidence' => ['lookup' => ['private' => true]]]]));
         $source = Message::create($base + ['content' => 'selamat malam']);
         $history = app(AiNaturalConversation::class)->history(['mode' => 'auto_reply', 'conversation_id' => $conversation->id, 'message_id' => $source->id]);
-        $this->assertSame([['role' => 'user', 'content' => 'mau tanya stroller']], $history);
+        $this->assertSame([['role' => 'user', 'content' => 'mau tanya stroller'], ['role' => 'assistant', 'content' => 'Mau lihat katalog stroller?']], $history);
         $conversation->update(['status' => 'human_handled']);
         $this->assertSame([], app(AiNaturalConversation::class)->history(['conversation_id' => $conversation->id, 'message_id' => $source->id]));
     }
