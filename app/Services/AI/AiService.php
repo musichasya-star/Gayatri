@@ -535,15 +535,20 @@ class AiService
 
     private function chatCompletions(string $url, string $model, array $messages): ?array
     {
+        $payload = ['model' => $model, 'messages' => $messages];
+        if (in_array($model, ['gpt-6-luna', 'openai/gpt-6-luna'], true)) {
+            // Luna supports Chat Completions with reasoning disabled for short chat replies.
+            $payload['reasoning_effort'] = 'none';
+            $payload['max_completion_tokens'] = (int) config('ai.max_tokens', 800);
+        } else {
+            $payload['temperature'] = (float) config('ai.temperature', 0.3);
+            $payload['max_tokens'] = (int) config('ai.max_tokens', 800);
+        }
+
         return Http::timeout(30)
             ->acceptJson()
             ->withToken((string) config('ai.api_key'))
-            ->post($url, [
-                'model' => $model,
-                'messages' => $messages,
-                'temperature' => (float) config('ai.temperature', 0.3),
-                'max_tokens' => (int) config('ai.max_tokens', 800),
-            ])
+            ->post($url, $payload)
             ->throw()
             ->json();
     }

@@ -33,7 +33,7 @@
                             @foreach($aiModels as $provider => $models)
                                 <optgroup label="{{ ucfirst($provider) }}">
                                     @foreach($models as $model)
-                                        <option value="{{ $model }}" @selected(old('model', $settings['ai.model']) === $model)>{{ $model }}</option>
+                                        <option value="{{ $model }}" @selected(old('model', $settings['ai.model']) === $model)>{{ in_array($model, ['gpt-6-luna', 'openai/gpt-6-luna'], true) ? 'GPT-6-Luna · '.$model : $model }}</option>
                                     @endforeach
                                 </optgroup>
                             @endforeach
@@ -46,6 +46,7 @@
 <details class="ops-section" style="grid-column:1/-1"><summary>Pengaturan lanjutan · variasi jawaban & batas keluaran</summary><div class="ops-section-body ops-fields">                    <label>
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Temperature</span>
                         <input class="input" type="number" step="0.1" min="0" max="2" name="temperature" value="{{ old('temperature', $settings['ai.temperature']) }}" required>
+                        <small class="muted">Untuk GPT-6-Luna, pengaturan Temperature tidak diterapkan.</small>
                     </label>
                     <label>
                         <span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Max Tokens</span>

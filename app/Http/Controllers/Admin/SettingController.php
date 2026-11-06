@@ -22,9 +22,9 @@ class SettingController extends Controller
 
     private const AI_MODELS = [
         'local' => ['local-deterministic'],
-        'openrouter' => ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001', 'deepseek/deepseek-chat'],
+        'openrouter' => ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001', 'deepseek/deepseek-chat', 'openai/gpt-6-luna'],
         'gemini' => ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
-        'openai' => ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
+        'openai' => ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-6-luna'],
         'deepseek' => ['deepseek-chat', 'deepseek-reasoner'],
     ];
 
