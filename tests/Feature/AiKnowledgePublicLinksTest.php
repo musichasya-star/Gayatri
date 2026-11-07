@@ -84,6 +84,36 @@ class AiKnowledgePublicLinksTest extends TestCase
         $this->assertSame('unverified_output', AiLog::find($answer['log_id'])->meta['generation']['fallback_code']);
     }
 
+    public function test_company_name_does_not_pull_physical_address_into_a_website_answer(): void
+    {
+        $this->website();
+        $address = KnowledgeBase::create(['title' => 'alamat gayatri', 'slug' => 'alamat-gayatri', 'type' => 'text',
+            'content' => 'alamat gayatri di Jalan Pengujian No.260, Kediri 64116. Owner Gayatri adalah Pengelola.',
+            'status' => 'active', 'publication_status' => 'published', 'audience' => 'customer_public',
+            'meta' => ['keywords' => ['alamat', 'gayatri', 'kantor']]]);
+        $address->domains()->create(['domain' => 'general']);
+        app(KnowledgeBaseService::class)->syncChunks($address);
+        $result = app(AiService::class)->simulate('alamat web gayatri apa');
+        $this->assertSame(['alamat-website-gayatri'], $result['sources']);
+        $this->assertStringNotContainsString('No.260', $result['reply']);
+        $this->assertStringContainsString('https://www.gayatri-kediri.web.id/', $result['reply']);
+    }
+
+    public function test_website_answer_can_omit_unrequested_numbers_from_the_same_source(): void
+    {
+        $kb = $this->website();
+        $kb->update(['content' => $kb->content.' Kantor di Jalan Pengujian No.260, Kediri 64116.']);
+        app(KnowledgeBaseService::class)->syncChunks($kb);
+        config(['ai.provider' => 'openai', 'ai.model' => 'gpt-6-luna', 'ai.api_key' => 'fake-test-key']);
+        Http::fake(['*' => Http::response(['choices' => [['finish_reason' => 'stop', 'message' => ['content' => json_encode([
+            'reply' => 'Website Gayatri: https://www.gayatri-kediri.web.id/', 'used_facts' => ['answer'],
+        ])]]]])]);
+        $result = app(AiService::class)->simulate('alamat web gayatri apa');
+        $this->assertSame('grounded_ai', $result['reply_source']);
+        $this->assertStringNotContainsString('260', $result['reply']);
+        $this->assertStringNotContainsString('64116', $result['reply']);
+    }
+
     public static function publicUrls(): array
     {
         $base = 'https://gayatri-kediri.web.id';

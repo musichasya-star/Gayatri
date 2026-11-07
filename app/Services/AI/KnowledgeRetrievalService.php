@@ -25,6 +25,12 @@ class KnowledgeRetrievalService
                 'ibu', 'bayi', 'berapa', 'layanan', 'laundry', 'rental', 'spa', 'pijat', 'asi', 'laktasi', 'mau', 'ingin',
                 'halo', 'hai', 'min', 'admin', 'kak', 'dong', 'tolong', 'sih', 'nih', 'juga', 'kalau', 'tersebut', 'tadi', 'itu',
             ], true));
+            if ($terms->contains('website')) {
+                // "Alamat web" asks for a URL; an office address is a separate topic.
+                $asksPhysicalAddress = preg_match('/\b(?:kantor|outlet|cabang|fisik|lokasi|rumah|peta|maps|alamat(?: gayatri)? (?:dan|serta)|(?:dan|serta) alamat)\b/u', $query);
+                $terms = $terms->reject(fn ($term) => $term === 'gayatri' || ($domain === 'general' && ! $asksPhysicalAddress && $term === 'alamat'))
+                    ->merge(['web', 'situs', 'url'])->unique();
+            }
             if ($terms->isEmpty()) {
                 return new Collection;
             }

@@ -172,7 +172,8 @@ PROMPT;
 
             return array_unique(array_map(fn ($number) => str_replace(['.', ','], '', $number), $matches[0]));
         };
-        if (array_diff($numbers($reply), $numbers($source)) || array_diff($numbers($result['reply']), $numbers($reply))) {
+        $needsAllNumbers = array_intersect($result['routing']['answered_intents'] ?? [$result['routing']['intent'] ?? ''], ['pricing', 'catalog', 'retail_catalog', 'home_service']);
+        if (array_diff($numbers($reply), $numbers($source)) || ($needsAllNumbers && array_diff($numbers($result['reply']), $numbers($reply)))) {
             return false;
         }
         $intent = $result['routing']['intent'] ?? '';
