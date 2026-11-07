@@ -119,6 +119,10 @@ class AiDomainRouter
         if (preg_match('/\b(komplain|kecewa|tidak puas|marah)\b/u', $text)) {
             return array_replace($result, ['intent' => 'human_handoff', 'reason_code' => 'sensitive_request']);
         }
+        if (! $result['candidates'] && preg_match('/\b(?:website|situs)\b/u', $text)
+            && ! preg_match('/\b(?:booking|reservasi|pesan|katalog)\b/u', $text)) {
+            $result['domain'] = 'general';
+        }
         if (preg_match('/^(?:(?:(?:halo|hai|hi|pagi|siang|sore|malam|selamat\s+(?:pagi|siang|sore|malam)|ass?alamu[\x{2019}\x{0027}]?alaikum|salam)(?:\s+(?:wr\.?\s*wb\.?|warahmatullahi\s+wabarakatuh))?)(?:\s+(?:min|admin|kak|mbak))?|(?:min|kak|mbak)|(?:(?:halo|hai)\s+(?:min|admin|kak|mbak)\s+)?(?:boleh|mau|ingin)\s+tanya(?:\s+dulu)?)[!?,.\s]*$/u', $text)) {
             return array_replace($result, ['intent' => 'greeting', 'reason_code' => 'greeting']);
         }

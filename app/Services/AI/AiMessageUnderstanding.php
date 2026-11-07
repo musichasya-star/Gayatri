@@ -24,9 +24,21 @@ class AiMessageUnderstanding
             'bersihnya' => 'kebersihan', 'bersihin' => 'kebersihan', 'dicuci' => 'cuci',
             'kebersihannya' => 'kebersihan', 'bayarnya' => 'bayar', 'syaratnya' => 'syarat', 'caranya' => 'cara',
             'aja' => 'saja', 'layanannya' => 'layanan',
+            'web' => 'website', 'webnya' => 'website', 'websitenya' => 'website', 'situs' => 'website', 'situsnya' => 'website',
+            'linknya' => 'link', 'tautannya' => 'tautan', 'url' => 'website', 'urlnya' => 'website',
         ];
 
         return preg_replace_callback('/\b[\pL]+\b/u', fn ($m) => $words[$m[0]] ?? $m[0], $text);
+    }
+
+    public function requestsPublicLink(string $message): bool
+    {
+        $text = $this->normalize($message);
+        if (preg_match('/\b(?:jangan|tanpa|tidak perlu|tidak usah)\b.{0,25}\b(?:link|tautan|url|website|situs)\b/u', $text)) {
+            return false;
+        }
+
+        return (bool) preg_match('/\b(?:website|situs|link|tautan|url)\b/u', $text);
     }
 
     public function topics(string $message): array
