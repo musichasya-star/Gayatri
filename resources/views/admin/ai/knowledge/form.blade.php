@@ -7,7 +7,7 @@
     <x-ui.page-header eyebrow="AI Management" title="{{ $knowledge->exists ? 'Edit Knowledge' : 'Tambah Knowledge' }}" description="Isi hanya informasi resmi yang aman digunakan AI untuk menjawab customer.">
         <x-slot name="actions"><a class="button button-secondary" href="{{ \App\Support\AdminReviewContext::back(request(),'knowledge') }}"><i data-lucide="arrow-left"></i> Kembali</a></x-slot>
     </x-ui.page-header>
-    @if ($errors->any())<div class="card" style="margin-bottom:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;">{{ $errors->first() }}</div></div>@endif
+    @if ($errors->any())<div class="card" role="alert" style="margin-bottom:1rem;border-color:rgba(201,122,106,.55);"><div class="card-body" style="color:#7a3228;">{{ $errors->first() }}</div></div>@endif
     @if($knowledge->is_demo)<div class="card" style="margin-bottom:1rem;"><div class="card-body">Contoh DEMO untuk simulator lokal. Konten ini tetap dikecualikan dari balasan WhatsApp pelanggan.</div></div>@endif
     <div class="card"><div class="card-body">
         <form data-guard-unsaved method="POST" enctype="multipart/form-data" action="{{ $knowledge->exists ? route('admin.ai.knowledge.update', $knowledge) : route('admin.ai.knowledge.store') }}" class="grid grid-2">
@@ -22,10 +22,12 @@
                 @endforeach
             </div>
             <label><span class="muted">Publikasi</span><select class="input" name="publication_status" required>
+                @php($selectedPublication = old('publication_status', $knowledge->publication_status ?? 'draft'))
+                @if(!$canPublish && $selectedPublication === 'published')<option value="" selected disabled>Pilih status penyimpanan</option>@endif
                 @foreach(['draft'=>'Draft','needs_review'=>'Perlu ditinjau','published'=>'Terbit','archived'=>'Arsip'] as $value=>$label)
-                    <option value="{{ $value }}" @selected(old('publication_status', $knowledge->publication_status ?? 'draft')===$value)>{{ $label }}</option>
+                    <option value="{{ $value }}" @disabled($value==='published' && !$canPublish) @selected($selectedPublication===$value && ($value!=='published' || $canPublish))>{{ $label }}{{ $value==='published' && !$canPublish ? ' — hanya owner/manager' : '' }}</option>
                 @endforeach
-            </select><small class="muted">Penerbitan hanya oleh owner/manager. Admin dapat menyiapkan draft.</small></label>
+            </select><small class="muted">{{ $knowledge->is_demo ? 'Admin dapat menyimpan perubahan DEMO. Materi ini tetap hanya untuk simulator.' : 'Penerbitan materi operasional hanya oleh owner/manager. Admin dapat menyiapkan Draf atau Perlu ditinjau; materi yang belum terbit tidak digunakan AI untuk pelanggan.' }}</small></label>
             <label><span class="muted">Pembaca</span><select class="input" name="audience"><option value="customer_public" @selected(old('audience',$knowledge->audience)==='customer_public')>Publik pelanggan</option><option value="internal_only" @selected(old('audience',$knowledge->audience)==='internal_only')>Internal saja</option></select></label>
             <label style="grid-column:1/-1;"><span class="muted">Kata kunci FAQ (pisahkan dengan koma)</span><input class="input" name="keywords" maxlength="800" value="{{ old('keywords', implode(', ', (array) data_get($knowledge->meta,'keywords',[]))) }}"><small class="muted">Nominal harga diatur melalui katalog. Jangan masukkan data pelanggan, kredensial, atau tautan portal privat.</small></label>
             <label><span class="muted" style="display:block;margin-bottom:.4rem;font-weight:700;">Judul</span><input class="input" name="title" value="{{ old('title', $knowledge->title) }}" required></label>

@@ -458,7 +458,7 @@ class AiAdminOperationsTest extends TestCase
         $this->assertFalse($draft->is_demo);
         $this->assertSame('draft', $draft->publication_status);
         $data = ['revision' => $draft->revision, 'title' => $draft->title, 'type' => 'faq', 'content' => $draft->content, 'status' => 'active', 'publication_status' => 'published', 'audience' => 'customer_public', 'domains' => ['spa']];
-        $this->put(route('admin.ai.knowledge.update', $draft), $data)->assertForbidden();
+        $this->put(route('admin.ai.knowledge.update', $draft), $data)->assertRedirect()->assertSessionHasErrors('publication_status');
         $this->actingAs($this->owner)->put(route('admin.ai.knowledge.update', $draft), $data)->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('published', $draft->fresh()->publication_status);
         $this->assertSame($this->owner->id, $draft->fresh()->reviewed_by);

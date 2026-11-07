@@ -400,7 +400,7 @@ class AiServiceAssistantTest extends TestCase
         $payload = ['title' => 'Pewangi laundry', 'type' => 'faq', 'content' => 'Pewangi dapat dikonfirmasi dengan admin.',
             'status' => 'active', 'domains' => ['laundry'], 'publication_status' => 'published', 'audience' => 'customer_public',
             'keywords' => 'pewangi, parfum'];
-        $this->actingAs($admin)->post(route('admin.ai.knowledge.store'), $payload)->assertForbidden();
+        $this->actingAs($admin)->post(route('admin.ai.knowledge.store'), $payload)->assertRedirect()->assertSessionHasErrors('publication_status');
         $this->actingAs($owner)->post(route('admin.ai.knowledge.store'), $payload)->assertSessionHasNoErrors()->assertRedirect();
         $knowledge = KnowledgeBase::first();
         $this->assertSame($owner->id, $knowledge->reviewed_by);
