@@ -1,0 +1,26 @@
+.knowledge-delete-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--soft-taupe, #d9d9e7);
+    border-radius: 1.25rem;
+    background: var(--ivory, #fff);
+    color: var(--text-main, #243c53);
+    box-shadow: 0 1.5rem 5rem #243c5333;
+    overflow: auto;
+}
+.knowledge-delete-dialog::backdrop { background: #182b4280; }
+.knowledge-delete-content { padding: 1.5rem; }
+.knowledge-delete-content h2 { margin: 0 0 1rem; font-size: 1.5rem; }
+.knowledge-delete-content p, .knowledge-delete-page p { line-height: 1.65; }
+.knowledge-delete-name { font-weight: 700; overflow-wrap: anywhere; }
+.knowledge-delete-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; margin-top: 1.5rem; }
+.knowledge-delete-confirm { background: #a32d55; color: #fff; border-color: #a32d55; }
+.knowledge-delete-confirm:hover { background: #842343; border-color: #842343; }
+.knowledge-delete-confirm:disabled { opacity: .65; cursor: wait; }
+.knowledge-delete-page { max-width: 44rem; }
+@media (max-width: 480px) {
+    .knowledge-delete-content { padding: 1.1rem; }
+    .knowledge-delete-actions > * { flex: 1; justify-content: center; }
+}

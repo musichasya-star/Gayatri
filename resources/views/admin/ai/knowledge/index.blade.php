@@ -2,6 +2,8 @@
 @section('title','Knowledge Base AI - Gayatri CRM')
 @section('content')
 @include('partials.admin-workbench-assets')
+@push('styles')<link rel="stylesheet" href="{{ asset('css/knowledge-delete.css').'?v='.config('gayatri_frontend.knowledge_delete_version') }}">@endpush
+@push('scripts')<script src="{{ asset('js/knowledge-delete.js').'?v='.config('gayatri_frontend.knowledge_delete_version') }}" defer></script>@endpush
 <x-ui.page-header eyebrow="Informasi layanan untuk AI" title="Knowledge Base" description="Cari materi, periksa cakupan layanan, dan tinjau publikasi sebelum dipakai untuk menjawab pelanggan."><x-slot name="actions"><a class="button button-primary" href="{{ route('admin.ai.knowledge.create',\App\Support\AdminReviewContext::carry(request(),'knowledge')) }}">Tambah Knowledge</a><a class="button button-secondary" href="{{ route('admin.ai.simulator') }}">Uji di simulator</a></x-slot></x-ui.page-header>
 @if(session('status'))<p class="wb-scope" role="status">{{ session('status') }}</p>@endif
 @if($errors->any())<div class="card" role="alert" style="padding:1rem;"><strong>Tindakan belum dapat diproses.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
@@ -18,13 +20,21 @@
 <td data-label="Tindak lanjut">
 <div class="ops-actions">
 <a class="button button-secondary" href="{{ route('admin.ai.knowledge.edit',array_merge(['knowledge'=>$knowledge],\App\Support\AdminReviewContext::carry(request(),'knowledge'))) }}">{{ $knowledge->publication_status==='needs_review' ? 'Tinjau materi' : 'Edit materi' }}</a>
-<form method="POST" action="{{ route('admin.ai.knowledge.destroy',$knowledge) }}" data-confirm-message="{{ 'Hapus materi “'.$knowledge->title.'”? Materi dan potongan informasinya akan dihapus permanen.' }}" onsubmit="return confirm(this.dataset.confirmMessage);">
-@csrf @method('DELETE') @include('partials.admin-review-fields',['reviewModule'=>'knowledge'])
-<input type="hidden" name="revision" value="{{ $knowledge->revision }}"><input type="hidden" name="confirmed" value="1">
-<button type="submit" class="button button-ghost" aria-label="{{ 'Hapus materi '.$knowledge->title }}"><i data-lucide="trash-2" aria-hidden="true"></i> Hapus</button>
-</form>
+<a class="button button-ghost" href="{{ route('admin.ai.knowledge.confirm-destroy',array_merge(['knowledge'=>$knowledge],\App\Support\AdminReviewContext::carry(request(),'knowledge'))) }}" data-knowledge-delete data-knowledge-title="{{ $knowledge->title }}" data-knowledge-revision="{{ $knowledge->revision }}" data-destroy-url="{{ route('admin.ai.knowledge.destroy',$knowledge) }}" aria-label="{{ 'Hapus materi '.$knowledge->title }}"><i data-lucide="trash-2" aria-hidden="true"></i> Hapus</a>
 </div>
 <details style="margin-top:.5rem"><summary>Pilihan lainnya</summary><div class="ops-actions" style="margin-top:.5rem"><form method="POST" action="{{ route('admin.ai.knowledge.toggle',$knowledge) }}">@csrf @include('partials.admin-review-fields',['reviewModule'=>'knowledge'])<input type="hidden" name="revision" value="{{ $knowledge->revision }}"><button class="button button-ghost">{{ $knowledge->status==='active' ? 'Nonaktifkan' : 'Aktifkan' }}</button></form>@if($knowledge->is_demo)<form method="POST" action="{{ route('admin.ai.knowledge.draft-from-demo',$knowledge) }}">@csrf<button class="button button-secondary">Salin ke draft tinjauan</button></form>@endif</div></details></td></tr>
 @empty<tr><td colspan="4">Tidak ada materi sesuai filter. Coba layanan atau status publikasi lain.</td></tr>@endforelse
 </tbody></table>{{ $knowledgeBases->links() }}</div></section>
+<dialog class="knowledge-delete-dialog" data-knowledge-delete-dialog aria-labelledby="knowledge-delete-heading" aria-describedby="knowledge-delete-description">
+<div class="knowledge-delete-content">
+<h2 id="knowledge-delete-heading">Hapus materi ini?</h2>
+<p class="knowledge-delete-name" data-knowledge-delete-name></p>
+<p id="knowledge-delete-description">Materi dan potongan informasinya akan dihapus permanen. Riwayat percakapan dan log AI tetap tersimpan.</p>
+<form method="POST" action="{{ route('admin.ai.knowledge.index') }}" data-knowledge-delete-form>
+@csrf @method('DELETE') @include('partials.admin-review-fields',['reviewModule'=>'knowledge'])
+<input type="hidden" name="revision" value="0"><input type="hidden" name="confirmed" value="1">
+<div class="knowledge-delete-actions"><button type="button" class="button button-secondary" data-knowledge-delete-cancel autofocus>Batal</button><button type="submit" class="button button-primary knowledge-delete-confirm" data-knowledge-delete-confirm>Hapus permanen</button></div>
+</form>
+</div>
+</dialog>
 @endsection

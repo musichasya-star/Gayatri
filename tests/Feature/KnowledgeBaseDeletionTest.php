@@ -76,10 +76,12 @@ class KnowledgeBaseDeletionTest extends TestCase
     {
         $knowledge = $this->knowledge();
         $url = route('admin.ai.knowledge.destroy', $knowledge);
+        $this->get(route('admin.ai.knowledge.confirm-destroy', $knowledge))->assertRedirect(route('login'));
         $this->delete($url, ['revision' => 2, 'confirmed' => 1])->assertRedirect(route('login'));
         foreach (['sales', 'therapist'] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role, 'status' => 'active']))
                 ->delete($url, ['revision' => 2, 'confirmed' => 1])->assertForbidden();
+            $this->get(route('admin.ai.knowledge.confirm-destroy', $knowledge))->assertForbidden();
         }
         $this->assertModelExists($knowledge);
         $this->assertDatabaseMissing('audit_logs', ['action' => 'ai.knowledge.delete']);
@@ -124,9 +126,27 @@ class KnowledgeBaseDeletionTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']))
             ->get(route('admin.ai.knowledge.index'))->assertOk()
             ->assertSee(route('admin.ai.knowledge.destroy', $knowledge), false)
-            ->assertSee('Hapus')->assertSee('data-confirm-message=', false)
+            ->assertSee(route('admin.ai.knowledge.confirm-destroy', $knowledge), false)
+            ->assertSee('Hapus')->assertSee('data-knowledge-delete-dialog', false)
+            ->assertSee('aria-labelledby="knowledge-delete-heading"', false)
+            ->assertSee('knowledge-delete.js?v='.config('gayatri_frontend.knowledge_delete_version'), false)
             ->assertSee('name="_method" value="DELETE"', false)
+            ->assertDontSee('onsubmit=', false)
             ->assertDontSee('<script>alert(1)</script>', false);
+    }
+
+    #[DataProvider('managers')]
+    public function test_confirmation_page_works_without_javascript_and_does_not_delete_on_get(string $role): void
+    {
+        $knowledge = $this->knowledge();
+        $this->actingAs(User::factory()->create(['role' => $role, 'status' => 'active']))
+            ->get(route('admin.ai.knowledge.confirm-destroy', ['knowledge' => $knowledge, '_list' => 'knowledge', '_filters' => ['domain' => 'spa']]))
+            ->assertOk()->assertSee($knowledge->title)->assertSee('Hapus permanen')->assertSee('Batal')
+            ->assertSee(route('admin.ai.knowledge.destroy', $knowledge), false)
+            ->assertSee('name="revision" value="2"', false)
+            ->assertSee(route('admin.ai.knowledge.index', ['domain' => 'spa']), false);
+        $this->assertModelExists($knowledge);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'ai.knowledge.delete']);
     }
 
     public function test_repeated_delete_returns_not_found_without_changing_other_material(): void

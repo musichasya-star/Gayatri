@@ -88,6 +88,11 @@ class KnowledgeBaseController extends Controller
         return redirect(AdminReviewContext::back($request, 'knowledge'))->with('status', 'Knowledge base berhasil diperbarui.');
     }
 
+    public function confirmDestroy(KnowledgeBase $knowledge): View
+    {
+        return view('admin.ai.knowledge.delete', compact('knowledge'));
+    }
+
     public function destroy(Request $request, KnowledgeBase $knowledge): RedirectResponse
     {
         $request->validate(['revision' => 'required|integer|min:1', 'confirmed' => 'required|accepted']);

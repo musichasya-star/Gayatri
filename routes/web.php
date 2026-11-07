@@ -410,6 +410,7 @@ Route::prefix('admin')
             Route::get('/ai/knowledge-base/create', [KnowledgeBaseController::class, 'create'])->name('ai.knowledge.create');
             Route::post('/ai/knowledge-base', [KnowledgeBaseController::class, 'store'])->name('ai.knowledge.store');
             Route::get('/ai/knowledge-base/{knowledge}/edit', [KnowledgeBaseController::class, 'edit'])->name('ai.knowledge.edit');
+            Route::get('/ai/knowledge-base/{knowledge}/delete', [KnowledgeBaseController::class, 'confirmDestroy'])->name('ai.knowledge.confirm-destroy');
             Route::put('/ai/knowledge-base/{knowledge}', [KnowledgeBaseController::class, 'update'])->name('ai.knowledge.update');
             Route::delete('/ai/knowledge-base/{knowledge}', [KnowledgeBaseController::class, 'destroy'])->name('ai.knowledge.destroy');
             Route::post('/ai/knowledge-base/{knowledge}/toggle', [KnowledgeBaseController::class, 'toggle'])->name('ai.knowledge.toggle');
