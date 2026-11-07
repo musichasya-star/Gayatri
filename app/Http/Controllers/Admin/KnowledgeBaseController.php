@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -85,6 +86,34 @@ class KnowledgeBaseController extends Controller
         $this->saveKnowledge($request, $knowledge, $data);
 
         return redirect(AdminReviewContext::back($request, 'knowledge'))->with('status', 'Knowledge base berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, KnowledgeBase $knowledge): RedirectResponse
+    {
+        $request->validate(['revision' => 'required|integer|min:1', 'confirmed' => 'required|accepted']);
+        $sourcePath = DB::transaction(function () use ($request, $knowledge) {
+            $knowledge = KnowledgeBase::whereKey($knowledge->id)->lockForUpdate()->firstOrFail();
+            if ($knowledge->revision !== $request->integer('revision')) {
+                throw ValidationException::withMessages(['revision' => 'Materi sudah berubah. Muat ulang daftar sebelum menghapus.']);
+            }
+            app(AuditLogService::class)->log($request->user(), 'ai.knowledge.delete', $knowledge, $request, [
+                'publication_status' => $knowledge->publication_status, 'status' => $knowledge->status,
+                'revision' => $knowledge->revision, 'is_demo' => $knowledge->is_demo,
+                'domains' => $knowledge->domains()->pluck('domain')->all(),
+            ], [], 'Materi knowledge dihapus; isi tidak disalin ke log audit.');
+            $sourcePath = $knowledge->source_path;
+            $knowledge->delete();
+            DB::table('ai_interaction_policies')->where('id', 1)->increment('revision');
+
+            return $sourcePath;
+        });
+        // Only unshared uploads owned by this module may be removed, after the database commit succeeds.
+        if (is_string($sourcePath) && preg_match('~^knowledge-base/[a-zA-Z0-9_-]+\.(?:txt|md|csv|json)$~D', $sourcePath)
+            && ! KnowledgeBase::where('source_path', $sourcePath)->exists()) {
+            rescue(fn () => Storage::disk('local')->delete($sourcePath));
+        }
+
+        return redirect(AdminReviewContext::back($request, 'knowledge'))->with('status', 'Knowledge base berhasil dihapus.');
     }
 
     public function toggle(Request $request, KnowledgeBase $knowledge): RedirectResponse
