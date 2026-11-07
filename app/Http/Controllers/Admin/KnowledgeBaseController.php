@@ -55,14 +55,14 @@ class KnowledgeBaseController extends Controller
     {
         return view('admin.ai.knowledge.form', [
             'knowledge' => new KnowledgeBase(['type' => 'text', 'status' => 'active']),
-            'canPublish' => $request->user()->hasRole(['owner', 'manager']),
+            'canPublish' => $this->canPublish($request),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validatedData($request);
-        $this->ensurePublicationAllowed($request, new KnowledgeBase, $data['publication_status'] ?? 'needs_review');
+        $this->ensurePublicationAllowed($request, $data['publication_status'] ?? 'needs_review');
         $data['slug'] = $this->knowledgeBaseService->makeSlug($data['title']);
         $data = $this->applyUploadedFile($request, $data);
 
@@ -73,7 +73,7 @@ class KnowledgeBaseController extends Controller
 
     public function edit(Request $request, KnowledgeBase $knowledge): View
     {
-        $canPublish = $this->canPublish($request, $knowledge);
+        $canPublish = $this->canPublish($request);
 
         return view('admin.ai.knowledge.form', compact('knowledge', 'canPublish'));
     }
@@ -84,7 +84,7 @@ class KnowledgeBaseController extends Controller
             $request->validate(['revision' => 'required|integer|min:1']);
         }
         $data = $this->validatedData($request);
-        $this->ensurePublicationAllowed($request, $knowledge, $data['publication_status'] ?? 'needs_review');
+        $this->ensurePublicationAllowed($request, $data['publication_status'] ?? 'needs_review');
         $data['slug'] = $this->knowledgeBaseService->makeSlug($data['title'], $knowledge->id);
         $data = $this->applyUploadedFile($request, $data, $knowledge);
 
@@ -132,7 +132,7 @@ class KnowledgeBaseController extends Controller
             $request->validate(['revision' => 'required|integer|min:1']);
         }
         if ($knowledge->status !== 'active' && $knowledge->publication_status === 'published') {
-            $this->ensurePublicationAllowed($request, $knowledge, 'published');
+            $this->ensurePublicationAllowed($request, 'published');
         }
         DB::transaction(function () use ($knowledge, $request) {
             $knowledge = KnowledgeBase::whereKey($knowledge->id)->lockForUpdate()->firstOrFail();
@@ -140,7 +140,7 @@ class KnowledgeBaseController extends Controller
                 throw ValidationException::withMessages(['revision' => 'Materi sudah berubah. Muat ulang sebelum mengubah status.']);
             }
             if ($knowledge->status !== 'active' && $knowledge->publication_status === 'published') {
-                $this->ensurePublicationAllowed($request, $knowledge, 'published');
+                $this->ensurePublicationAllowed($request, 'published');
             }
             $before = $knowledge->toArray();
             $knowledge->update(['status' => $knowledge->status === 'active' ? 'inactive' : 'active', 'revision' => $knowledge->revision + 1]);
@@ -169,19 +169,18 @@ class KnowledgeBaseController extends Controller
             return $draft;
         });
 
-        return redirect()->route('admin.ai.knowledge.edit', $draft)->with('status', 'Draft disiapkan. Periksa ketentuan bisnis sebenarnya sebelum diterbitkan oleh owner/manager.');
+        return redirect()->route('admin.ai.knowledge.edit', $draft)->with('status', 'Draft disiapkan. Periksa ketentuan bisnis sebenarnya sebelum diterbitkan oleh owner, manager, atau admin.');
     }
 
-    private function canPublish(Request $request, KnowledgeBase $knowledge): bool
+    private function canPublish(Request $request): bool
     {
-        // DEMO content remains excluded from production WhatsApp, including after edits.
-        return $request->user()->hasRole(['owner', 'manager']) || ($knowledge->exists && $knowledge->is_demo);
+        return $request->user()->hasRole(['owner', 'manager', 'admin']);
     }
 
-    private function ensurePublicationAllowed(Request $request, KnowledgeBase $knowledge, string $publication): void
+    private function ensurePublicationAllowed(Request $request, string $publication): void
     {
-        if ($publication === 'published' && ! $this->canPublish($request, $knowledge)) {
-            throw ValidationException::withMessages(['publication_status' => 'Materi operasional hanya boleh diterbitkan oleh owner atau manager. Pilih Draf atau Perlu ditinjau untuk menyimpan perubahan sebagai admin.']);
+        if ($publication === 'published' && ! $this->canPublish($request)) {
+            throw ValidationException::withMessages(['publication_status' => 'Penerbitan Knowledge Base hanya untuk owner, manager, atau admin.']);
         }
     }
 
@@ -209,7 +208,7 @@ class KnowledgeBaseController extends Controller
     {
         $domains = $data['domains'] ?? [];
         $publication = $data['publication_status'] ?? 'needs_review';
-        $this->ensurePublicationAllowed($request, $knowledge, $publication);
+        $this->ensurePublicationAllowed($request, $publication);
         if ($publication === 'published') {
             app(AiPublicContent::class)->validate($data['title']."\n".($data['content'] ?? ''));
         }
@@ -234,7 +233,7 @@ class KnowledgeBaseController extends Controller
                 }
                 $data['revision'] = $knowledge->revision + 1;
             }
-            $this->ensurePublicationAllowed($request, $knowledge, $data['publication_status']);
+            $this->ensurePublicationAllowed($request, $data['publication_status']);
             $knowledge->fill($data)->save();
             $knowledge->domains()->delete();
             $knowledge->domains()->createMany(array_map(fn ($domain) => ['domain' => $domain], $domains));

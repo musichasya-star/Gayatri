@@ -54,17 +54,18 @@ class KnowledgeBaseSaveTest extends TestCase
         $this->assertCount(1, app(KnowledgeRetrievalService::class)->retrieve('persiapan kunjungan', 5, 'spa', true));
     }
 
-    public function test_admin_cannot_publish_real_material_and_validation_keeps_edits_on_the_form(): void
+    public function test_content_rejection_keeps_edits_and_does_not_change_published_material(): void
     {
         $knowledge = $this->knowledge();
         $editUrl = route('admin.ai.knowledge.edit', $knowledge);
         $policyRevision = DB::table('ai_interaction_policies')->where('id', 1)->value('revision');
+        $invalidContent = 'Persiapan kunjungan dengan tarif Rp1000.';
         $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']))
-            ->from($editUrl)->put(route('admin.ai.knowledge.update', $knowledge), $this->payload(['is_demo' => true]))
-            ->assertRedirect($editUrl)->assertSessionHasErrors('publication_status')
-            ->assertSessionHasInput('content', $this->payload()['content']);
-        $this->get($editUrl)->assertOk()->assertSee('Materi operasional hanya boleh diterbitkan oleh owner atau manager.')
-            ->assertSee($this->payload()['content'])->assertSee('Pilih status penyimpanan');
+            ->from($editUrl)->put(route('admin.ai.knowledge.update', $knowledge), $this->payload(['is_demo' => true, 'content' => $invalidContent]))
+            ->assertRedirect($editUrl)->assertSessionHasErrors('content')
+            ->assertSessionHasInput('content', $invalidContent);
+        $this->get($editUrl)->assertOk()->assertSee('Konten mengandung instruksi, kredensial, klaim transaksi, atau nominal harga.')
+            ->assertSee($invalidContent)->assertDontSee('Pilih status penyimpanan');
         $this->assertSame('Persiapan kunjungan lama.', $knowledge->fresh()->content);
         $this->assertFalse($knowledge->fresh()->is_demo);
         $this->assertSame(2, $knowledge->fresh()->revision);
@@ -84,11 +85,11 @@ class KnowledgeBaseSaveTest extends TestCase
 
     public static function publishers(): array
     {
-        return [['owner'], ['manager']];
+        return [['owner'], ['manager'], ['admin']];
     }
 
     #[DataProvider('publishers')]
-    public function test_owner_and_manager_can_save_and_publish_real_material(string $role): void
+    public function test_authorized_roles_can_save_and_publish_real_material(string $role): void
     {
         $knowledge = $this->knowledge(false, 'needs_review');
         $actor = User::factory()->create(['role' => $role, 'status' => 'active']);
@@ -96,22 +97,29 @@ class KnowledgeBaseSaveTest extends TestCase
             ->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('published', $knowledge->fresh()->publication_status);
         $this->assertSame($actor->id, $knowledge->fresh()->reviewed_by);
+        $this->assertFalse($knowledge->fresh()->is_demo);
+        $this->assertCount(1, app(KnowledgeRetrievalService::class)->retrieve('persiapan kunjungan', 5, 'spa'));
     }
 
-    public function test_denied_publication_does_not_store_an_upload_or_allow_a_forged_demo_flag(): void
+    public function test_admin_can_publish_an_upload_and_cannot_forge_a_demo_flag(): void
     {
         Storage::fake('local');
-        $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']))
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $this->actingAs($admin)
             ->post(route('admin.ai.knowledge.store'), $this->payload(['is_demo' => true,
                 'file' => UploadedFile::fake()->createWithContent('panduan.txt', 'Panduan persiapan kunjungan.')]))
-            ->assertRedirect()->assertSessionHasErrors('publication_status');
-        $this->assertDatabaseCount('knowledge_bases', 0);
-        $this->assertSame([], Storage::disk('local')->allFiles('knowledge-base'));
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $knowledge = KnowledgeBase::sole();
+        $this->assertFalse($knowledge->is_demo);
+        $this->assertSame('published', $knowledge->publication_status);
+        $this->assertSame($admin->id, $knowledge->reviewed_by);
+        $this->assertSame('Panduan persiapan kunjungan.', $knowledge->content);
+        Storage::disk('local')->assertExists($knowledge->source_path);
     }
 
     public static function forms(): array
     {
-        return [['admin', true, true], ['admin', false, false], ['owner', false, true], ['manager', false, true]];
+        return [['admin', true, true], ['admin', false, true], ['owner', false, true], ['manager', false, true]];
     }
 
     #[DataProvider('forms')]
@@ -139,20 +147,40 @@ class KnowledgeBaseSaveTest extends TestCase
         $this->assertSame('Persiapan kunjungan lama.', $knowledge->fresh()->content);
     }
 
-    public function test_demo_reactivation_is_allowed_but_real_publication_is_still_restricted(): void
+    public function test_admin_can_reactivate_published_demo_and_real_material(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
         foreach ([true, false] as $demo) {
             $knowledge = $this->knowledge($demo);
             $knowledge->update(['status' => 'inactive']);
             $response = $this->post(route('admin.ai.knowledge.toggle', $knowledge), ['revision' => 2]);
-            if ($demo) {
-                $response->assertSessionHasNoErrors();
-                $this->assertSame('active', $knowledge->fresh()->status);
-            } else {
-                $response->assertSessionHasErrors('publication_status');
-                $this->assertSame('inactive', $knowledge->fresh()->status);
-            }
+            $response->assertSessionHasNoErrors();
+            $this->assertSame('active', $knowledge->fresh()->status);
+            $this->assertSame($demo, $knowledge->fresh()->is_demo);
         }
+    }
+
+    public function test_sales_and_therapists_cannot_publish_or_reactivate_knowledge(): void
+    {
+        $knowledge = $this->knowledge(false, 'draft');
+        $knowledge->update(['status' => 'inactive']);
+        foreach (['sales', 'therapist'] as $role) {
+            $this->actingAs(User::factory()->create(['role' => $role, 'status' => 'active']));
+            $this->get(route('admin.ai.knowledge.create'))->assertForbidden();
+            $this->post(route('admin.ai.knowledge.store'), $this->payload())->assertForbidden();
+            $this->put(route('admin.ai.knowledge.update', $knowledge), $this->payload())->assertForbidden();
+            $this->post(route('admin.ai.knowledge.toggle', $knowledge), ['revision' => 2])->assertForbidden();
+        }
+        $this->assertSame('draft', $knowledge->fresh()->publication_status);
+        $this->assertSame('inactive', $knowledge->fresh()->status);
+        $this->assertSame(2, $knowledge->fresh()->revision);
+        $this->assertDatabaseCount('knowledge_bases', 1);
+    }
+
+    public function test_admin_create_form_allows_the_published_option(): void
+    {
+        $response = $this->actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']))
+            ->get(route('admin.ai.knowledge.create'))->assertOk()->assertViewHas('canPublish', true);
+        $this->assertDoesNotMatchRegularExpression('/<option\b[^>]*value="published"[^>]*\bdisabled\b/', $response->getContent());
     }
 }

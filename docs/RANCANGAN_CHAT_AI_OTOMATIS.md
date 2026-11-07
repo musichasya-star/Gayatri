@@ -442,7 +442,7 @@ Admin tidak dapat menonaktifkan pemeriksaan pemilik, membuat AI menandai lunas, 
 | Peran | Hak usulan |
 | --- | --- |
 | Owner/manager aktif | Mengubah mode, publikasi knowledge, pengaturan utama dan melihat audit |
-| Admin aktif | Mengelola konten/rule dan simulasi sesuai otorisasi; perubahan mode/publikasi mengikuti izin yang ditetapkan |
+| Admin aktif | Mengelola konten/rule dan simulasi sesuai otorisasi; dapat menerbitkan Knowledge Base sejak 7 November 2026 sesuai permintaan pengguna. Izin perubahan mode AI tetap mengikuti pengaturan sebelumnya. |
 | Sales/therapist | Inbox dan informasi sesuai pembatasan yang sudah berlaku; tidak otomatis memperoleh pengaturan AI atau data transaksi semua pelanggan |
 
 Hak baru harus eksplisit melalui middleware/policy. Jangan memperluas scope CRM/inbox yang sudah dilindungi.
@@ -1158,7 +1158,7 @@ Checklist keseluruhan di atas tetap menjadi target akhir. Paket A–E memiliki b
 ## 23. Urutan praktis saat melanjutkan pengerjaan
 
 1. **Paket A: audit + mode information_web + penguncian seluruh jalur mutasi AI lama** sudah selesai di lokal; gunakan laporan hasil sebagai baseline berikutnya.
-2. **Paket B: menu/router + knowledge per layanan + pengarahan web** sudah selesai di lokal. FAQ tambahan disiapkan sebagai draft untuk ditinjau owner/manager.
+2. **Paket B: menu/router + knowledge per layanan + pengarahan web** sudah selesai di lokal. FAQ tambahan disiapkan sebagai draft untuk ditinjau owner/manager/admin.
 3. **Paket C: lookup status dengan verifikasi pemilik** selesai di lokal. Gunakan dua profil demo pada simulator; data pelanggan nyata tidak dapat dipilih di simulator.
 4. **Paket D: pengaturan admin + handoff + simulasi + monitoring** selesai di lokal. Gunakan laporan Paket D untuk pengujian gaya bahasa, tinjauan FAQ, takeover/resume dan alur pengiriman.
 5. **Paket E: regression + demo/UAT teknis lokal + rekonsiliasi legacy** telah dikerjakan; gunakan laporan E untuk temuan, 12 draft tinjauan, dan bukti pengujian. Selesaikan kesiapan materi/katalog/outlet bersama admin sebelum rilis.
@@ -1166,7 +1166,7 @@ Checklist keseluruhan di atas tetap menjadi target akhir. Paket A–E memiliki b
 
 Contoh instruksi lanjutan untuk pengembang:
 
-> Tinjau laporan Paket E dan siapkan gate Paket F: lengkapi/publikasikan knowledge bisnis melalui owner/manager, pastikan katalog laktasi dan pengaturan laundry sesuai operasi nyata, lalu verifikasi runtime/engine target sebelum deployment Gayatri terisolasi. Pertahankan seluruh pengamanan AI dan data. Pengujian WhatsApp nyata memerlukan sesi serta penerima uji yang ditentukan pengguna; saat ini pengguna memilih simulasi.
+> Tinjau laporan Paket E dan siapkan gate Paket F: lengkapi/publikasikan knowledge bisnis melalui owner/manager/admin, pastikan katalog laktasi dan pengaturan laundry sesuai operasi nyata, lalu verifikasi runtime/engine target sebelum deployment Gayatri terisolasi. Pertahankan seluruh pengamanan AI dan data. Pengujian WhatsApp nyata memerlukan sesi serta penerima uji yang ditentukan pengguna; saat ini pengguna memilih simulasi.
 
 Pengayaan yang dapat dikerjakan setelah fondasi stabil:
 
@@ -1208,6 +1208,7 @@ Setiap paket selesai harus memperbarui checkbox, file implementasi, bukti test, 
 | 1.4 | 2026-11-01 | Paket D selesai lokal: kendali/gaya admin, alur lanjutan kontekstual, tinjauan FAQ, handoff/resume tanpa backlog dan trace pengiriman; 693 tes aktif lulus; berikutnya Paket E |
 | 1.5 | 2026-11-02 | Paket E teknis lokal: pemahaman bahasa, rencana jawaban gabungan, fokus katalog, audit/draft knowledge, ingress idempoten dan handoff media; 731 tes aktif/12 gateway lulus, migrasi dan dua proses MariaDB terisolasi; kesiapan bisnis/perangkat nyata/rilis tetap tercatat terpisah |
 | 1.6 | 2026-11-06 | Percakapan natural: provider/model aktif digunakan pada jalur informasi aman, persona dan preferensi gaya dibaca, salam dipisahkan dari menu, riwayat singkat per percakapan dan sumber publik terbit masuk konteks; lookup, handoff, dan larangan mutasi tetap deterministik. |
+| 1.7 | 2026-11-07 | Sesuai instruksi pengguna, admin dapat menerbitkan/memperbarui/mengaktifkan Knowledge Base operasional maupun DEMO. Validasi isi publik, cakupan, masa berlaku, revisi, audit penerbit, dan pemisahan DEMO tetap berlaku; izin role lain serta kendali aktivasi AI tidak diperluas. |
 
 ### Catatan implementasi percakapan natural — 6 November 2026
 

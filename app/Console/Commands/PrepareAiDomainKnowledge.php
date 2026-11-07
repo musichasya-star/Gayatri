@@ -37,7 +37,7 @@ class PrepareAiDomainKnowledge extends Command
                 }
             }
         });
-        $this->info($count.' draft FAQ disiapkan. Owner/manager meninjau sebelum menerbitkan.');
+        $this->info($count.' draft FAQ disiapkan. Owner, manager, atau admin meninjau sebelum menerbitkan.');
 
         return self::SUCCESS;
     }

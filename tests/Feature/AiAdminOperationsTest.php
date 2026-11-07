@@ -446,7 +446,7 @@ class AiAdminOperationsTest extends TestCase
         $this->actingAs($this->owner)->get(route('admin.ai.logs.show', $log))->assertOk()->assertDontSee('configured-secret-key')->assertDontSee('08123450011');
     }
 
-    public function test_demo_can_be_copied_to_review_draft_once_and_only_owner_publishes_current_revision(): void
+    public function test_demo_can_be_copied_once_and_admin_or_owner_can_publish_current_revision(): void
     {
         $this->artisan('ai:seed-knowledge-demo')->assertSuccessful();
         $demo = KnowledgeBase::where('is_demo', true)->whereHas('domains', fn ($q) => $q->where('domain', 'spa'))->firstOrFail();
@@ -458,7 +458,10 @@ class AiAdminOperationsTest extends TestCase
         $this->assertFalse($draft->is_demo);
         $this->assertSame('draft', $draft->publication_status);
         $data = ['revision' => $draft->revision, 'title' => $draft->title, 'type' => 'faq', 'content' => $draft->content, 'status' => 'active', 'publication_status' => 'published', 'audience' => 'customer_public', 'domains' => ['spa']];
-        $this->put(route('admin.ai.knowledge.update', $draft), $data)->assertRedirect()->assertSessionHasErrors('publication_status');
+        $this->put(route('admin.ai.knowledge.update', $draft), $data)->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('published', $draft->fresh()->publication_status);
+        $this->assertSame($admin->id, $draft->fresh()->reviewed_by);
+        $data['revision'] = $draft->fresh()->revision;
         $this->actingAs($this->owner)->put(route('admin.ai.knowledge.update', $draft), $data)->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('published', $draft->fresh()->publication_status);
         $this->assertSame($this->owner->id, $draft->fresh()->reviewed_by);

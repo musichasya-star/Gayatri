@@ -393,16 +393,18 @@ class AiServiceAssistantTest extends TestCase
         $this->assertStringContainsString('belum dapat dipastikan', app(AiService::class)->simulate('Laktasi home service ke rumah')['reply']);
     }
 
-    public function test_owner_can_publish_scoped_faq_but_admin_can_only_prepare_draft(): void
+    public function test_owner_and_admin_can_publish_scoped_faq_and_prepare_drafts(): void
     {
         $owner = User::factory()->create(['role' => 'owner', 'status' => 'active']);
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         $payload = ['title' => 'Pewangi laundry', 'type' => 'faq', 'content' => 'Pewangi dapat dikonfirmasi dengan admin.',
             'status' => 'active', 'domains' => ['laundry'], 'publication_status' => 'published', 'audience' => 'customer_public',
             'keywords' => 'pewangi, parfum'];
-        $this->actingAs($admin)->post(route('admin.ai.knowledge.store'), $payload)->assertRedirect()->assertSessionHasErrors('publication_status');
+        $this->actingAs($admin)->post(route('admin.ai.knowledge.store'), $payload)->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame($admin->id, KnowledgeBase::sole()->reviewed_by);
+        $payload['title'] = 'Pewangi laundry tambahan';
         $this->actingAs($owner)->post(route('admin.ai.knowledge.store'), $payload)->assertSessionHasNoErrors()->assertRedirect();
-        $knowledge = KnowledgeBase::first();
+        $knowledge = KnowledgeBase::where('title', $payload['title'])->sole();
         $this->assertSame($owner->id, $knowledge->reviewed_by);
         $this->assertSame('laundry', $knowledge->domains->first()->domain);
         $this->assertStringContainsString('Pewangi dapat dikonfirmasi', app(AiService::class)->simulate('Pewangi laundry?')['reply']);
